@@ -2,103 +2,186 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AksiIzin;
+use App\Enums\ModulAplikasi;
 use App\Enums\PeranSistem;
+use App\Support\CakupanPengguna;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
 
+/**
+ * Matriks izin `modul.aksi` untuk 12 menu dan 4 peran (PRD E.2, fitur.pdf Tahap 2).
+ *
+ * Sumber tunggal daftar aksi adalah enum ModulAplikasi::aksi(), sehingga izin yang
+ * di-seed selalu sama dengan izin yang diperiksa middleware dan Policy.
+ */
 class PeranIzinSeeder extends Seeder
 {
-    /**
-     * Daftar izin per modul dengan pola `modul.aksi`.
-     *
-     * @var array<string, array<int, string>>
-     */
-    private const IZIN = [
-        'assignment' => ['view', 'create', 'update', 'delete', 'verify'],
-        'activity_log' => ['view', 'create', 'update'],
-        'report' => ['view', 'create', 'update', 'submit', 'verify'],
-        'document' => ['view', 'create', 'update', 'delete'],
-        'review' => ['view', 'create', 'update'],
-        'feedback' => ['view', 'create', 'update'],
-        'action_item' => ['view', 'create', 'update', 'verify'],
-        'kpi' => ['view', 'create', 'update', 'finalize'],
-        'meeting' => ['view', 'create', 'update'],
-        'personel' => ['view', 'create', 'update', 'deactivate'],
-        'user' => ['view', 'create', 'update', 'deactivate'],
-        'audit' => ['view'],
-    ];
-
-    /**
-     * Peta peran ke izin. `admin` memakai seluruh izin yang terdaftar.
-     *
-     * @var array<string, array<int, string>>
-     */
-    private const PETA_PERAN = [
-        PeranSistem::Pengurus->value => [
-            'assignment.view', 'assignment.create', 'assignment.update', 'assignment.verify',
-            'activity_log.view',
-            'report.view', 'report.verify',
-            'document.view', 'document.create',
-            'review.view', 'review.create',
-            'feedback.view', 'feedback.create',
-            'action_item.view',
-            'kpi.view', 'kpi.finalize',
-            'meeting.view', 'meeting.create',
-            'personel.view',
-            'audit.view',
-        ],
-        PeranSistem::DirekturEksekutif->value => [
-            'assignment.view', 'assignment.create', 'assignment.update', 'assignment.verify',
-            'activity_log.view',
-            'report.view', 'report.verify',
-            'document.view', 'document.create', 'document.update',
-            'review.view', 'review.create', 'review.update',
-            'feedback.view', 'feedback.create', 'feedback.update',
-            'action_item.view', 'action_item.create', 'action_item.update', 'action_item.verify',
-            'kpi.view', 'kpi.create', 'kpi.update', 'kpi.finalize',
-            'meeting.view', 'meeting.create', 'meeting.update',
-            'personel.view',
-            'audit.view',
-        ],
-        PeranSistem::Staf->value => [
-            'assignment.view', 'assignment.update',
-            'activity_log.view', 'activity_log.create', 'activity_log.update',
-            'report.view', 'report.create', 'report.update', 'report.submit',
-            'document.view', 'document.create', 'document.update',
-            'feedback.view',
-            'action_item.view', 'action_item.update',
-            'kpi.view',
-            'meeting.view',
-        ],
-    ];
-
     public function run(): void
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        $semuaIzin = [];
-
-        foreach (self::IZIN as $modul => $aksi) {
-            foreach ($aksi as $a) {
-                $nama = $modul.'.'.$a;
-                Permission::findOrCreate($nama, 'web');
-                $semuaIzin[] = $nama;
-            }
-        }
+        $semuaIzin = $this->daftarkanIzin();
 
         foreach (PeranSistem::cases() as $peran) {
             Role::findOrCreate($peran->value, 'web');
         }
 
-        foreach (self::PETA_PERAN as $namaPeran => $izin) {
+        foreach ($this->petaPeran() as $namaPeran => $izin) {
             Role::findByName($namaPeran, 'web')->syncPermissions($izin);
         }
 
-        // Admin memegang seluruh izin, termasuk yang ditambahkan di masa depan.
-        Role::findByName(PeranSistem::Admin->value, 'web')->syncPermissions($semuaIzin);
+        // Jaring pengaman: peran admin tidak boleh memegang izin penilaian meskipun
+        // daftar di atas keliru diubah.
+        Role::findByName(PeranSistem::Admin->value, 'web')
+            ->revokePermissionTo(CakupanPengguna::PENILAIAN_DILARANG_ADMIN);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $this->command?->info(sprintf(
+            'PeranIzinSeeder: %d izin untuk %d peran.',
+            count($semuaIzin),
+            count(PeranSistem::cases()),
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function daftarkanIzin(): array
+    {
+        $semua = [];
+
+        foreach (ModulAplikasi::cases() as $modul) {
+            foreach ($modul->aksi() as $aksi) {
+                $nama = $modul->izin($aksi);
+                Permission::findOrCreate($nama, 'web');
+                $semua[] = $nama;
+            }
+        }
+
+        return $semua;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function petaPeran(): array
+    {
+        return [
+            PeranSistem::Pengurus->value => $this->izinPengurus(),
+            PeranSistem::DirekturEksekutif->value => $this->izinDirekturEksekutif(),
+            PeranSistem::Staf->value => $this->izinStaf(),
+            PeranSistem::Admin->value => $this->izinAdmin(),
+        ];
+    }
+
+    /**
+     * Pengurus: membaca lintas personel, memberi arahan, memutuskan KPI.
+     * Tidak menilai kualitas laporan (itu kewenangan DE).
+     *
+     * @return list<string>
+     */
+    private function izinPengurus(): array
+    {
+        return $this->gabung(
+            $this->izin(ModulAplikasi::Penugasan, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Verifikasi, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::LogAktivitas, AksiIzin::Lihat, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Laporan, AksiIzin::Lihat, AksiIzin::Verifikasi, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Dokumen, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Review, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Verifikasi),
+            $this->izin(ModulAplikasi::UmpanBalik, AksiIzin::Lihat, AksiIzin::Buat),
+            $this->izin(ModulAplikasi::TindakLanjut, AksiIzin::Lihat),
+            $this->izin(ModulAplikasi::Kpi, AksiIzin::Lihat, AksiIzin::Kunci, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Rapat, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Personel, AksiIzin::Lihat, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Audit, AksiIzin::Lihat),
+        );
+    }
+
+    /**
+     * DE: kendali operasional penuh termasuk penilaian, kecuali konfigurasi KPI
+     * dan administrasi akun.
+     *
+     * @return list<string>
+     */
+    private function izinDirekturEksekutif(): array
+    {
+        $izin = [];
+
+        foreach (ModulAplikasi::cases() as $modul) {
+            if (in_array($modul, [ModulAplikasi::Akun, ModulAplikasi::Audit], true)) {
+                continue;
+            }
+
+            foreach ($modul->aksi() as $aksi) {
+                if ($modul === ModulAplikasi::Kpi && $aksi === AksiIzin::Konfigurasi) {
+                    continue;
+                }
+
+                $izin[] = $modul->izin($aksi);
+            }
+        }
+
+        return $izin;
+    }
+
+    /**
+     * Staf: eksekusi dan pelaporan milik sendiri.
+     *
+     * @return list<string>
+     */
+    private function izinStaf(): array
+    {
+        return $this->gabung(
+            $this->izin(ModulAplikasi::Penugasan, AksiIzin::Lihat, AksiIzin::Ubah),
+            $this->izin(ModulAplikasi::LogAktivitas, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Laporan, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ajukan, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Dokumen, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Review, AksiIzin::Lihat),
+            $this->izin(ModulAplikasi::UmpanBalik, AksiIzin::Lihat),
+            $this->izin(ModulAplikasi::TindakLanjut, AksiIzin::Lihat, AksiIzin::Ubah),
+            $this->izin(ModulAplikasi::Kpi, AksiIzin::Lihat),
+            $this->izin(ModulAplikasi::Rapat, AksiIzin::Lihat),
+        );
+    }
+
+    /**
+     * Administrator: akun, master personel, konfigurasi teknis, audit.
+     * Tanpa satu pun izin penilaian.
+     *
+     * @return list<string>
+     */
+    private function izinAdmin(): array
+    {
+        return $this->gabung(
+            $this->izin(ModulAplikasi::Akun, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan),
+            $this->izin(ModulAplikasi::Personel, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan),
+            $this->izin(ModulAplikasi::Dokumen, AksiIzin::Lihat, AksiIzin::Ubah),
+            $this->izin(ModulAplikasi::Kpi, AksiIzin::Lihat, AksiIzin::Konfigurasi),
+            $this->izin(ModulAplikasi::Audit, AksiIzin::Lihat, AksiIzin::Ekspor),
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function izin(ModulAplikasi $modul, AksiIzin ...$aksi): array
+    {
+        return array_map(
+            static fn (AksiIzin $a): string => $modul->izin($a),
+            $aksi,
+        );
+    }
+
+    /**
+     * @param  list<string>  ...$kelompok
+     * @return list<string>
+     */
+    private function gabung(array ...$kelompok): array
+    {
+        return array_values(array_unique(array_merge(...$kelompok)));
     }
 }
