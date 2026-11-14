@@ -121,6 +121,12 @@ class PeranIzinSeeder extends Seeder
                     continue;
                 }
 
+                // Penetapan/freeze Job Description adalah wewenang Administrator
+                // (PRD E.2 baris 9); DE hanya mengusulkan draf.
+                if ($modul === ModulAplikasi::Personel && $aksi === AksiIzin::Konfigurasi) {
+                    continue;
+                }
+
                 $izin[] = $modul->izin($aksi);
             }
         }
@@ -136,6 +142,7 @@ class PeranIzinSeeder extends Seeder
     private function izinStaf(): array
     {
         return $this->gabung(
+            $this->izin(ModulAplikasi::Personel, AksiIzin::Lihat),
             $this->izin(ModulAplikasi::Penugasan, AksiIzin::Lihat, AksiIzin::Ubah),
             $this->izin(ModulAplikasi::LogAktivitas, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ekspor),
             $this->izin(ModulAplikasi::Laporan, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ajukan, AksiIzin::Ekspor),
@@ -158,7 +165,7 @@ class PeranIzinSeeder extends Seeder
     {
         return $this->gabung(
             $this->izin(ModulAplikasi::Akun, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan),
-            $this->izin(ModulAplikasi::Personel, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan),
+            $this->izin(ModulAplikasi::Personel, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan, AksiIzin::Konfigurasi),
             $this->izin(ModulAplikasi::Dokumen, AksiIzin::Lihat, AksiIzin::Ubah),
             $this->izin(ModulAplikasi::Kpi, AksiIzin::Lihat, AksiIzin::Konfigurasi),
             $this->izin(ModulAplikasi::Audit, AksiIzin::Lihat, AksiIzin::Ekspor),

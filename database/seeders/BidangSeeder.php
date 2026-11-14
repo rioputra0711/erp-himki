@@ -5,19 +5,26 @@ namespace Database\Seeders;
 use App\Models\Bidang;
 use Illuminate\Database\Seeder;
 
+/**
+ * Bidang kerja Badan Eksekutif HIMKI (fitur.pdf Tahap 3).
+ *
+ * Daftar ini adalah acuan resmi modul Master Personel: Keuangan, Administrasi,
+ * Publikasi, HI/Pameran, TI, Operasional. Bidang lama dari usulan Tahap 1 tidak
+ * dihapus (personel historis masih merujuknya) melainkan dinonaktifkan agar
+ * tidak lagi muncul pada pilihan baru.
+ */
 class BidangSeeder extends Seeder
 {
     /**
-     * Bidang kerja di lingkungan Badan Eksekutif HIMKI.
-     *
      * @var array<int, array{kode: string, nama: string}>
      */
     private const DAFTAR = [
-        ['kode' => 'PROGRAM', 'nama' => 'Bidang Program dan Kegiatan'],
         ['kode' => 'KEUANGAN', 'nama' => 'Bidang Keuangan'],
-        ['kode' => 'SDM', 'nama' => 'Bidang Sumber Daya Manusia'],
-        ['kode' => 'HUMAS', 'nama' => 'Bidang Hubungan Masyarakat'],
-        ['kode' => 'UMUM', 'nama' => 'Bidang Umum dan Kesekretariatan'],
+        ['kode' => 'ADMINISTRASI', 'nama' => 'Bidang Administrasi'],
+        ['kode' => 'PUBLIKASI', 'nama' => 'Bidang Publikasi'],
+        ['kode' => 'HI_PAMERAN', 'nama' => 'Bidang Hubungan Internasional & Pameran'],
+        ['kode' => 'TI', 'nama' => 'Bidang Teknologi Informasi'],
+        ['kode' => 'OPERASIONAL', 'nama' => 'Bidang Operasional'],
     ];
 
     public function run(): void
@@ -28,5 +35,9 @@ class BidangSeeder extends Seeder
                 ['nama' => $bidang['nama'], 'is_active' => true]
             );
         }
+
+        Bidang::query()
+            ->whereNotIn('kode', array_column(self::DAFTAR, 'kode'))
+            ->update(['is_active' => false]);
     }
 }

@@ -39,7 +39,18 @@
     </div>
 
     @if (collect($aksi)->firstWhere('boleh', true))
-        <p class="mt-4 text-sm">
+        <p class="mt-4 flex flex-wrap gap-2 text-sm">
+            @if ($modul === \App\Enums\ModulAplikasi::Personel && auth()->user()?->can('personel.view'))
+                <a href="{{ route('master.personel.index') }}"
+                   class="rounded-lg bg-slate-900 px-3 py-1.5 font-medium text-white hover:bg-slate-800">
+                    Buka Master Personel
+                </a>
+                <a href="{{ route('master.jd.index') }}"
+                   class="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
+                    Buka Job Description
+                </a>
+            @endif
+
             <a href="{{ route('modul.ekspor', $modul->value) }}"
                class="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50">
                 Unduh rekapitulasi (CSV)

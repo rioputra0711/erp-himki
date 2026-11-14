@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\JenisLaporan;
 use App\Enums\StatusLaporan;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\MilikSesiPelapor;
 use App\Support\ServerClock;
 use Database\Factories\ReportFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Report extends Model
 {
     /** @use HasFactory<ReportFactory> */
-    use Auditable, HasFactory;
+    use Auditable, HasFactory, MilikSesiPelapor;
 
     protected $fillable = [
         'personel_id',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\KategoriPersonel;
+use App\Models\Concerns\Auditable;
 use Database\Factories\JabatanFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Jabatan extends Model
 {
     /** @use HasFactory<JabatanFactory> */
-    use HasFactory;
+    use Auditable, HasFactory;
 
     protected $table = 'jabatans';
 

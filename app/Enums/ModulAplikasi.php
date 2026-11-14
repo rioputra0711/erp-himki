@@ -58,7 +58,7 @@ enum ModulAplikasi: string
             self::TindakLanjut => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Verifikasi, AksiIzin::Ekspor],
             self::Kpi => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Kunci, AksiIzin::Konfigurasi, AksiIzin::Ekspor],
             self::Rapat => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ekspor],
-            self::Personel => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan, AksiIzin::Ekspor],
+            self::Personel => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan, AksiIzin::Konfigurasi, AksiIzin::Ekspor],
             self::Akun => [AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Nonaktifkan],
             self::Audit => [AksiIzin::Lihat, AksiIzin::Ekspor],
         };

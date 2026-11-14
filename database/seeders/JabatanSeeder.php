@@ -24,6 +24,11 @@ class JabatanSeeder extends Seeder
         ['kode' => 'STAF_PROGRAM', 'nama' => 'Staf Program', 'kelompok' => KategoriPersonel::Staf],
         ['kode' => 'STAF_KEUANGAN', 'nama' => 'Staf Keuangan', 'kelompok' => KategoriPersonel::Staf],
         ['kode' => 'STAF_UMUM', 'nama' => 'Staf Umum', 'kelompok' => KategoriPersonel::Staf],
+        ['kode' => 'STAF_ADMINISTRASI', 'nama' => 'Staf Administrasi', 'kelompok' => KategoriPersonel::Staf],
+        ['kode' => 'STAF_PUBLIKASI', 'nama' => 'Staf Publikasi', 'kelompok' => KategoriPersonel::Staf],
+        ['kode' => 'STAF_HI', 'nama' => 'Staf Hubungan Internasional & Pameran', 'kelompok' => KategoriPersonel::Staf],
+        ['kode' => 'STAF_TI', 'nama' => 'Staf Teknologi Informasi', 'kelompok' => KategoriPersonel::Staf],
+        ['kode' => 'STAF_OPERASIONAL', 'nama' => 'Staf Operasional', 'kelompok' => KategoriPersonel::Staf],
     ];
 
     public function run(): void

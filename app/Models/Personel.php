@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\KategoriPersonel;
+use App\Models\Concerns\Auditable;
+use App\Support\CakupanPengguna;
 use Database\Factories\PersonelFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Personel extends Model
 {
     /** @use HasFactory<PersonelFactory> */
-    use HasFactory;
+    use Auditable, HasFactory;
 
     protected $table = 'personel';
 
@@ -96,5 +98,35 @@ class Personel extends Model
     public function scopeKategori(Builder $query, KategoriPersonel $kategori): Builder
     {
         return $query->where('kategori', $kategori->value);
+    }
+
+    /**
+     * Batasi kueri pada baris yang boleh dibaca akun ini.
+     *
+     * Staf hanya melihat barisnya sendiri; peran lain mengikuti izin modul yang
+     * sudah diperiksa middleware. Dipakai daftar master agar tautan langsung ke
+     * baris orang lain tetap ditolak Policy, bukan hanya disembunyikan di UI.
+     */
+    public function scopeTerlihatOleh(Builder $query, ?User $user): Builder
+    {
+        if ($user === null || ! CakupanPengguna::adalahStaf($user)) {
+            return $query;
+        }
+
+        return $query->whereKey(CakupanPengguna::personelId($user) ?? 0);
+    }
+
+    /**
+     * Identitas resmi untuk ditampilkan pada laporan (fitur.pdf Tahap 3).
+     *
+     * @return array{nama: string, jabatan: ?string, bidang: ?string}
+     */
+    public function identitas(): array
+    {
+        return [
+            'nama' => $this->nama_lengkap,
+            'jabatan' => $this->jabatan?->nama,
+            'bidang' => $this->bidang?->nama,
+        ];
     }
 }

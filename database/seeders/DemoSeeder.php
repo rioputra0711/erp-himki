@@ -38,23 +38,16 @@ class DemoSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = $this->buatPersonel('admin', 'Administrator Aplikasi', 'STAF_UMUM', 'UMUM', PeranSistem::Admin);
+        $admin = $this->buatPersonel('admin', 'Administrator Aplikasi', 'STAF_UMUM', 'ADMINISTRASI', PeranSistem::Admin);
         $pengurus = $this->buatPersonel('ketua', 'Ketua Umum HIMKI', 'KETUM', null, PeranSistem::Pengurus);
-        $de = $this->buatPersonel('direktur', 'Direktur Eksekutif', 'DE', 'PROGRAM', PeranSistem::DirekturEksekutif);
-        $staf = $this->buatPersonel('staf', 'Staf Program', 'STAF_PROGRAM', 'PROGRAM', PeranSistem::Staf);
+        $de = $this->buatPersonel('direktur', 'Direktur Eksekutif', 'DE', 'OPERASIONAL', PeranSistem::DirekturEksekutif);
+        $staf = $this->buatPersonel('staf', 'Staf Publikasi', 'STAF_PUBLIKASI', 'PUBLIKASI', PeranSistem::Staf);
 
-        $jd = JobDescription::query()->updateOrCreate(
-            ['kode' => 'JD-PROGRAM-01'],
-            [
-                'jabatan_id' => Jabatan::query()->where('kode', 'STAF_PROGRAM')->value('id'),
-                'kategori' => KategoriTugas::Utama,
-                'uraian' => 'Menyusun dan melaksanakan program kerja bidang sesuai arahan DE.',
-                'indikator' => 'Program terlaksana sesuai target keluaran dan tenggat.',
-                'target' => 'Seluruh program bidang terlaksana dalam satu periode kepengurusan.',
-                'frekuensi' => 'bulanan',
-                'is_active' => true,
-            ]
-        );
+        $jd = JobDescription::query()
+            ->where('jabatan_id', Jabatan::query()->where('kode', 'STAF_PUBLIKASI')->value('id'))
+            ->where('kode', 'JD-PUBLIKASI-01')
+            ->where('versi', 1)
+            ->firstOrFail();
 
         $assignment = Assignment::query()->updateOrCreate([
             'judul' => 'Penyusunan Matriks Program Kerja Bidang Program',

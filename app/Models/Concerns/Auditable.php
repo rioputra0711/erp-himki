@@ -13,6 +13,21 @@ use Illuminate\Support\Facades\Auth;
  */
 trait Auditable
 {
+    /**
+     * Alasan perubahan yang dicatat pada audit berikutnya.
+     *
+     * Dipakai aksi yang mewajibkan alasan (mis. penetapan target/indikator)
+     * tanpa menambahkan kolom alasan ke tabel domain.
+     */
+    protected ?string $alasanAudit = null;
+
+    public function denganAlasan(string $alasan): static
+    {
+        $this->alasanAudit = $alasan;
+
+        return $this;
+    }
+
     public static function bootAuditable(): void
     {
         static::created(function (self $model): void {
@@ -34,11 +49,11 @@ trait Auditable
      */
     protected function catatAudit(string $event, ?array $before, ?array $after): void
     {
-        $reason = null;
+        $reason = $this->alasanAudit ?? null;
 
-        if (isset($after['alasan_pembatalan'])) {
+        if ($reason === null && isset($after['alasan_pembatalan'])) {
             $reason = $after['alasan_pembatalan'];
-        } elseif (isset($after['reason'])) {
+        } elseif ($reason === null && isset($after['reason'])) {
             $reason = $after['reason'];
         }
 

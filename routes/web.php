@@ -3,6 +3,10 @@
 use App\Http\Controllers\BerandaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EksporController;
+use App\Http\Controllers\MasterBidangController;
+use App\Http\Controllers\MasterJabatanController;
+use App\Http\Controllers\MasterJobDescriptionController;
+use App\Http\Controllers\MasterPersonelController;
 use App\Http\Controllers\ModulController;
 use App\Http\Controllers\UnduhDokumenController;
 use Illuminate\Support\Facades\Route;
@@ -48,4 +52,63 @@ Route::middleware(['auth', 'aktif'])->group(function (): void {
     Route::get('/dokumen/{dokumen}/unduh', UnduhDokumenController::class)
         ->middleware('izin:document.view')
         ->name('dokumen.unduh');
+
+    /*
+    |----------------------------------------------------------------------
+    | Master Data Personel, Jabatan, Bidang & Job Description (Tahap 3)
+    |----------------------------------------------------------------------
+    |
+    | Jabatan, bidang, dan Job Description bukan menu tersendiri; ketiganya
+    | berada di bawah wewenang menu Master Personel (fitur.pdf Tahap 3).
+    |
+    */
+    Route::prefix('master')->name('master.')->group(function (): void {
+        // Rute statis (/create) harus didaftarkan sebelum rute berparameter
+        // (/personel/{personel}) agar tidak tertangkap sebagai ID.
+        Route::middleware('izin:personel.create')->group(function (): void {
+            Route::get('personel/create', [MasterPersonelController::class, 'create'])->name('personel.create');
+            Route::post('personel', [MasterPersonelController::class, 'store'])->name('personel.store');
+
+            Route::post('jabatan', [MasterJabatanController::class, 'store'])->name('jabatan.store');
+            Route::post('bidang', [MasterBidangController::class, 'store'])->name('bidang.store');
+
+            Route::get('job-description/create', [MasterJobDescriptionController::class, 'create'])->name('jd.create');
+            Route::post('job-description', [MasterJobDescriptionController::class, 'store'])->name('jd.store');
+        });
+
+        Route::middleware('izin:personel.view')->group(function (): void {
+            Route::get('personel', [MasterPersonelController::class, 'index'])->name('personel.index');
+            Route::get('personel/{personel}', [MasterPersonelController::class, 'show'])->name('personel.show');
+
+            Route::get('jabatan', [MasterJabatanController::class, 'index'])->name('jabatan.index');
+            Route::get('bidang', [MasterBidangController::class, 'index'])->name('bidang.index');
+
+            Route::get('job-description', [MasterJobDescriptionController::class, 'index'])->name('jd.index');
+            Route::get('job-description/{job_description}', [MasterJobDescriptionController::class, 'show'])->name('jd.show');
+        });
+
+        Route::middleware('izin:personel.update')->group(function (): void {
+            Route::get('personel/{personel}/edit', [MasterPersonelController::class, 'edit'])->name('personel.edit');
+            Route::put('personel/{personel}', [MasterPersonelController::class, 'update'])->name('personel.update');
+
+            Route::put('jabatan/{jabatan}', [MasterJabatanController::class, 'update'])->name('jabatan.update');
+            Route::put('bidang/{bidang}', [MasterBidangController::class, 'update'])->name('bidang.update');
+
+            Route::get('job-description/{job_description}/edit', [MasterJobDescriptionController::class, 'edit'])->name('jd.edit');
+            Route::put('job-description/{job_description}', [MasterJobDescriptionController::class, 'update'])->name('jd.update');
+        });
+
+        Route::middleware('izin:personel.deactivate')->group(function (): void {
+            Route::patch('personel/{personel}/nonaktifkan', [MasterPersonelController::class, 'nonaktifkan'])->name('personel.nonaktifkan');
+            Route::patch('jabatan/{jabatan}/nonaktifkan', [MasterJabatanController::class, 'nonaktifkan'])->name('jabatan.nonaktifkan');
+            Route::patch('bidang/{bidang}/nonaktifkan', [MasterBidangController::class, 'nonaktifkan'])->name('bidang.nonaktifkan');
+        });
+
+        // Penetapan target & indikator = kewenangan Administrator saja.
+        Route::middleware('izin:personel.configure')->group(function (): void {
+            Route::patch('job-description/{job_description}/tetapkan', [MasterJobDescriptionController::class, 'tetapkan'])->name('jd.tetapkan');
+            Route::patch('job-description/{job_description}/arsipkan', [MasterJobDescriptionController::class, 'arsipkan'])->name('jd.arsipkan');
+            Route::post('job-description/{job_description}/versi-baru', [MasterJobDescriptionController::class, 'versiBaru'])->name('jd.versi');
+        });
+    });
 });

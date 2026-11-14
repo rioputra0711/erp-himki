@@ -22,6 +22,13 @@
                         {{ $item->label() }}
                     </a>
                 @endforeach
+
+                @can('personel.view')
+                    <a href="{{ route('master.personel.index') }}"
+                       class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                        Master Data
+                    </a>
+                @endcan
             </nav>
 
             <div class="ml-auto flex items-center gap-3 text-sm">

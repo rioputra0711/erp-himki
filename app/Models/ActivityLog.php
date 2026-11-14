@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\MilikSesiPelapor;
 use App\Support\ServerClock;
 use Database\Factories\ActivityLogFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ActivityLog extends Model
 {
     /** @use HasFactory<ActivityLogFactory> */
-    use HasFactory;
+    use HasFactory, MilikSesiPelapor;
 
     protected $fillable = [
         'personel_id',

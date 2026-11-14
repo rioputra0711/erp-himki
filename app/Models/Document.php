@@ -6,6 +6,7 @@ use App\Enums\KategoriDokumen;
 use App\Enums\KlasifikasiDokumen;
 use App\Enums\StatusDokumen;
 use App\Models\Concerns\Auditable;
+use App\Models\Concerns\MilikSesiPelapor;
 use Database\Factories\DocumentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Document extends Model
 {
     /** @use HasFactory<DocumentFactory> */
-    use Auditable, HasFactory;
+    use Auditable, HasFactory, MilikSesiPelapor;
 
     protected $fillable = [
         'judul',
@@ -45,6 +46,11 @@ class Document extends Model
             'versi' => 'integer',
             'file_size' => 'integer',
         ];
+    }
+
+    protected function kolomPelapor(): string
+    {
+        return 'pemilik_id';
     }
 
     public function pemilik(): BelongsTo
