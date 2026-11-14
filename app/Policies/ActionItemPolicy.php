@@ -34,4 +34,17 @@ class ActionItemPolicy
     {
         return $this->boleh($user, AksiIzin::Verifikasi);
     }
+
+    /**
+     * Alias agar pemanggilan `verifikasi` dan `verify` tidak berbeda arti.
+     */
+    public function verifikasi(User $user, ActionItem $actionItem): bool
+    {
+        return $this->verify($user, $actionItem);
+    }
+
+    public function tutup(User $user, ActionItem $actionItem): bool
+    {
+        return $this->verify($user, $actionItem);
+    }
 }

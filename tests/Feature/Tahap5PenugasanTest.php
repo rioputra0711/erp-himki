@@ -507,4 +507,98 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertSame(1, $ringkas['tindakLanjut']->count());
         $this->assertSame(2, $ringkas['jumlah']);
     }
+
+    // ------------------------------------------------ 9. Policy penugasan
+
+    #[Test]
+    public function staf_tidak_dapat_menyunting_tugas_dan_hanya_boleh_progres_miliknya(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        $milikSendiri = Assignment::factory()->create(['pic_id' => $personel->id]);
+        $milikOrangLain = Assignment::factory()->create(['pic_id' => Personel::factory()]);
+
+        $this->assertFalse($staf->can('sunting', $milikSendiri));
+        $this->assertTrue($staf->can('progres', $milikSendiri));
+        $this->assertTrue($staf->can('ajukan', $milikSendiri));
+        $this->assertFalse($staf->can('progres', $milikOrangLain));
+        $this->assertFalse($staf->can('batalkan', $milikSendiri));
+    }
+
+    #[Test]
+    public function hanya_de_yang_dapat_memverifikasi_menutup_dan_mengaktifkan_tugas(): void
+    {
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::DiajukanSelesai,
+            'progres' => 100,
+        ]);
+
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $this->assertTrue($de->can('verify', $tugas));
+        $this->assertTrue($de->can('tutup', $tugas));
+        $this->assertTrue($de->can('aktifkan', $tugas));
+
+        foreach ([PeranSistem::Pengurus, PeranSistem::Staf] as $peran) {
+            $user = $this->akun($peran);
+            Personel::factory()->create(['user_id' => $user->id]);
+
+            $this->assertFalse($user->can('verify', $tugas), "Peran {$peran->value} seharusnya tidak boleh verifikasi.");
+            $this->assertFalse($user->can('tutup', $tugas));
+        }
+    }
+
+    #[Test]
+    public function pengurus_hanya_mengubah_dan_membatalkan_tugas_yang_ia_terbitkan(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $personel = Personel::factory()->create(['user_id' => $pengurus->id]);
+
+        $miliknya = Assignment::factory()->create(['pemberi_tugas_id' => $personel->id]);
+        $milikDe = Assignment::factory()->create(['pemberi_tugas_id' => Personel::factory()]);
+
+        $this->assertTrue($pengurus->can('sunting', $miliknya));
+        $this->assertTrue($pengurus->can('batalkan', $miliknya));
+        $this->assertFalse($pengurus->can('sunting', $milikDe));
+        $this->assertFalse($pengurus->can('batalkan', $milikDe));
+    }
+
+    #[Test]
+    public function persetujuan_formal_hanya_untuk_pengurus_pada_baris_non_persetujuan(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $komentar = Feedback::factory()->create([
+            'jenis' => JenisFeedback::Komentar,
+            'asal' => AsalFeedback::Pengurus,
+        ]);
+        $sudahPersetujuan = Feedback::factory()->create([
+            'jenis' => JenisFeedback::Persetujuan,
+            'asal' => AsalFeedback::Pengurus,
+        ]);
+
+        $this->assertTrue($pengurus->can('setujui', $komentar));
+        $this->assertFalse($pengurus->can('setujui', $sudahPersetujuan));
+        $this->assertFalse($de->can('setujui', $komentar));
+    }
+
+    #[Test]
+    public function penutupan_action_item_hanya_untuk_pemegang_verifikasi(): void
+    {
+        $item = ActionItem::factory()->create(['status' => StatusActionItem::DiajukanSelesai]);
+
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $staf = $this->akun(PeranSistem::Staf);
+        Personel::factory()->create(['user_id' => $staf->id]);
+
+        $this->assertTrue($de->can('tutup', $item));
+        $this->assertTrue($de->can('verifikasi', $item));
+        $this->assertFalse($staf->can('tutup', $item));
+        $this->assertFalse($staf->can('verifikasi', $item));
+    }
 }
