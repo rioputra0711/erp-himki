@@ -106,6 +106,7 @@ final class LabelAudit
             'akses.izin_dicabut',
             'ekspor.audit',
             'identitas.ditolak',
+            'notifikasi.gagal',
         ];
     }
 
@@ -128,6 +129,7 @@ final class LabelAudit
             'akses.izin_dicabut' => 'Izin dicabut',
             'ekspor.audit' => 'Ekspor audit',
             'identitas.ditolak' => 'Pemalsuan identitas ditolak',
+            'notifikasi.gagal' => 'Notifikasi gagal dikirim',
             default => Str::startsWith($event, 'ekspor.')
                 ? 'Ekspor '.$event
                 : $event,
@@ -190,6 +192,19 @@ final class LabelAudit
             'klasifikasi' => 'Klasifikasi',
             'reason' => 'Alasan',
             'alasan_pembatalan' => 'Alasan pembatalan',
+            'alasan_penutupan' => 'Alasan penutupan',
+            'bukti_penutupan' => 'Bukti penutupan',
+            'bukti_pembatalan' => 'Bukti pembatalan',
+            'bukti_dokumen_id' => 'Dokumen bukti',
+            'dependensi_id' => 'Tugas dependensi',
+            'sumber_perintah' => 'Sumber perintah',
+            'sumber_arahan_id' => 'Arahan asal',
+            'pemberi_tugas_id' => 'Pemberi tugas',
+            'diteruskan_oleh_id' => 'Diteruskan oleh',
+            'pemberi_jabatan' => 'Jabatan pemberi',
+            'pic_id' => 'PIC',
+            'penerima_id' => 'Penerima',
+            'jenis' => 'Jenis',
             'nip' => 'ID personel',
             'telepon' => 'Telepon',
             'nama_lengkap' => 'Nama resmi',

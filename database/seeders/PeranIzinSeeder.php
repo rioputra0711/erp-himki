@@ -80,14 +80,15 @@ class PeranIzinSeeder extends Seeder
 
     /**
      * Pengurus: membaca lintas personel, memberi arahan, memutuskan KPI.
-     * Tidak menilai kualitas laporan (itu kewenangan DE).
+     * Tidak menilai kualitas laporan (itu kewenangan DE), dan tidak
+     * memverifikasi/menutup penugasan — kewenangan itu milik DE (desain Tahap 5 §10).
      *
      * @return list<string>
      */
     private function izinPengurus(): array
     {
         return $this->gabung(
-            $this->izin(ModulAplikasi::Penugasan, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Verifikasi, AksiIzin::Ekspor),
+            $this->izin(ModulAplikasi::Penugasan, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ubah, AksiIzin::Ekspor),
             $this->izin(ModulAplikasi::LogAktivitas, AksiIzin::Lihat, AksiIzin::Ekspor),
             $this->izin(ModulAplikasi::Laporan, AksiIzin::Lihat, AksiIzin::Verifikasi, AksiIzin::Ekspor),
             $this->izin(ModulAplikasi::Dokumen, AksiIzin::Lihat, AksiIzin::Buat, AksiIzin::Ekspor),

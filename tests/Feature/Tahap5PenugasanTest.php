@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 /**
@@ -102,5 +103,17 @@ class Tahap5PenugasanTest extends TestCase
 
         $this->assertStringContainsString('feedback_persetujuan_pengurus', $pesan);
         $this->assertDatabaseCount('feedback', 0);
+    }
+
+    // --------------------------------------- 2. Matriks izin & label audit
+
+    #[Test]
+    public function pengurus_tidak_memegang_izin_verifikasi_penugasan(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+
+        $this->assertFalse($pengurus->can('assignment.verify'));
+        $this->assertTrue($pengurus->can('assignment.create'));
+        $this->assertSame(56, Permission::query()->count());
     }
 }
