@@ -46,6 +46,19 @@
             </nav>
 
             <div class="ml-auto flex items-center gap-3 text-sm">
+                @auth
+                    @php($belumDibaca = auth()->user()->unreadNotifications()->count())
+                    <a href="{{ route('notifikasi.index') }}"
+                       class="relative rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                        Notifikasi
+                        @if ($belumDibaca > 0)
+                            <span class="ml-1 rounded-full bg-rose-600 px-1.5 py-0.5 text-xs font-semibold text-white">
+                                {{ $belumDibaca > 99 ? '99+' : $belumDibaca }}
+                            </span>
+                        @endif
+                    </a>
+                @endauth
+
                 <span class="text-slate-500">{{ auth()->user()?->name }}</span>
                 <span class="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium text-white">
                     {{ auth()->user()?->peranSistem()?->label() }}

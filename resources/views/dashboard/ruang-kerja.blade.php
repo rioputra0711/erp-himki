@@ -43,6 +43,88 @@
     </section>
 
     <section class="mt-8">
+        <div class="flex flex-wrap items-end justify-between gap-2">
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Tunggakan Anda</h2>
+            <p class="text-xs text-slate-500">
+                Pekerjaan yang belum tuntas tetap ditahan di sini sampai ditutup.
+            </p>
+        </div>
+
+        @if ($tunggakan['jumlah'] === 0)
+            <p class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Tidak ada tunggakan.
+            </p>
+        @else
+            <div class="mt-3 grid gap-3 lg:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tugas belum final</p>
+                    <ul class="mt-2 space-y-2 text-sm">
+                        @forelse ($tunggakan['tugas'] as $satu)
+                            <li>
+                                <a href="{{ route('tugas.show', $satu) }}" class="font-medium text-slate-900 hover:underline">
+                                    {{ $satu->kode ?? 'Tanpa ID' }}
+                                </a>
+                                <span class="block text-xs text-slate-600">
+                                    {{ \Illuminate\Support\Str::limit($satu->judul, 60) }}
+                                </span>
+                                <span class="block text-xs text-slate-500">
+                                    Tenggat {{ $satu->tenggat?->translatedFormat('d M Y') ?? '—' }}
+                                    @if ($satu->terlambat())
+                                        &middot; <span class="font-medium text-rose-700">terlambat</span>
+                                    @endif
+                                </span>
+                            </li>
+                        @empty
+                            <li class="text-slate-500">Tidak ada tugas tertunda.</li>
+                        @endforelse
+                    </ul>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Tindak lanjut terbuka</p>
+                    <ul class="mt-2 space-y-2 text-sm">
+                        @forelse ($tunggakan['tindakLanjut'] as $satu)
+                            <li>
+                                @if ($satu->feedback)
+                                    <a href="{{ route('arahan.show', $satu->feedback) }}" class="font-medium text-slate-900 hover:underline">
+                                        {{ \Illuminate\Support\Str::limit($satu->deskripsi, 60) }}
+                                    </a>
+                                @else
+                                    <span class="font-medium text-slate-900">{{ \Illuminate\Support\Str::limit($satu->deskripsi, 60) }}</span>
+                                @endif
+                                <span class="block text-xs text-slate-500">
+                                    {{ $satu->status?->label() ?? '—' }}
+                                    &middot; tenggat {{ $satu->tenggat?->translatedFormat('d M Y') ?? '—' }}
+                                </span>
+                            </li>
+                        @empty
+                            <li class="text-slate-500">Tidak ada tindak lanjut terbuka.</li>
+                        @endforelse
+                    </ul>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Arahan menunggu tindakan</p>
+                    <ul class="mt-2 space-y-2 text-sm">
+                        @forelse ($tunggakan['arahan'] as $satu)
+                            <li>
+                                <a href="{{ route('arahan.show', $satu) }}" class="font-medium text-slate-900 hover:underline">
+                                    {{ \Illuminate\Support\Str::limit($satu->isi, 60) }}
+                                </a>
+                                <span class="block text-xs text-slate-500">
+                                    {{ $satu->jenis?->label() }} &middot; {{ $satu->status?->label() }}
+                                </span>
+                            </li>
+                        @empty
+                            <li class="text-slate-500">Tidak ada arahan menunggu.</li>
+                        @endforelse
+                    </ul>
+                </div>
+            </div>
+        @endif
+    </section>
+
+    <section class="mt-8">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-500">Aktivitas terakhir</h2>
 
         <div class="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">

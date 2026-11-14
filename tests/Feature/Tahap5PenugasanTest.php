@@ -1038,4 +1038,93 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertSame(StatusActionItem::Ditutup, $item->fresh()->status);
         $this->assertNotNull($item->fresh()->selesai_pada);
     }
+
+    // ------------------------------------------- 13. Pusat notifikasi
+
+    #[Test]
+    public function notifikasi_milik_akun_lain_menghasilkan_404(): void
+    {
+        $pemilik = $this->akun(PeranSistem::Staf);
+        $lain = $this->akun(PeranSistem::Staf);
+        $notifikasi = $pemilik->notifications()->create([
+            'id' => Str::uuid()->toString(),
+            'type' => 'uji',
+            'data' => ['judul' => 'X'],
+        ]);
+
+        $this->actingAs($lain)->post(route('notifikasi.baca', $notifikasi->id))->assertNotFound();
+    }
+
+    #[Test]
+    public function baca_semua_menghapus_lencana_belum_dibaca(): void
+    {
+        $user = $this->akun(PeranSistem::Staf);
+        $user->notifications()->create([
+            'id' => Str::uuid()->toString(),
+            'type' => 'uji',
+            'data' => ['judul' => 'X'],
+        ]);
+
+        $this->assertSame(1, $user->unreadNotifications()->count());
+        $this->actingAs($user)->post(route('notifikasi.baca-semua'))->assertRedirect();
+        $this->assertSame(0, $user->fresh()->unreadNotifications()->count());
+    }
+
+    #[Test]
+    public function layar_notifikasi_menampilkan_isi_dan_menandai_satu_baris(): void
+    {
+        $user = $this->akun(PeranSistem::Staf);
+        $notifikasi = $user->notifications()->create([
+            'id' => Str::uuid()->toString(),
+            'type' => 'uji',
+            'data' => [
+                'judul' => 'Penugasan baru: TGS-01',
+                'pesan' => 'Siapkan rekap.',
+                'url' => null,
+                'jenis' => 'penugasan',
+                'objek_id' => 1,
+            ],
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('notifikasi.index'))
+            ->assertOk()
+            ->assertSee('Penugasan baru: TGS-01')
+            ->assertSee('Siapkan rekap.');
+
+        $this->actingAs($user)->post(route('notifikasi.baca', $notifikasi->id))->assertRedirect();
+        $this->assertNotNull($notifikasi->fresh()->read_at);
+        $this->assertSame(0, $user->fresh()->unreadNotifications()->count());
+    }
+
+    // ---------------------------------------- 14. Panel tunggakan dashboard
+
+    #[Test]
+    public function dashboard_staf_menampilkan_tunggakan_miliknya(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        Assignment::factory()->create([
+            'pic_id' => $personel->id,
+            'status' => StatusPenugasan::Aktif,
+            'judul' => 'Rekap presensi bidang',
+        ]);
+
+        $this->actingAs($staf)
+            ->get(route('staf.dashboard'))
+            ->assertOk()
+            ->assertSee('Tunggakan Anda')
+            ->assertSee('Rekap presensi bidang');
+    }
+
+    #[Test]
+    public function dashboard_admin_menyatakan_tidak_ada_tunggakan(): void
+    {
+        $admin = $this->akun(PeranSistem::Admin);
+
+        $this->actingAs($admin)
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('Tidak ada tunggakan.');
+    }
 }

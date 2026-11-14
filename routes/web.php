@@ -11,6 +11,7 @@ use App\Http\Controllers\MasterJabatanController;
 use App\Http\Controllers\MasterJobDescriptionController;
 use App\Http\Controllers\MasterPersonelController;
 use App\Http\Controllers\ModulController;
+use App\Http\Controllers\NotifikasiController;
 use App\Http\Controllers\TindakLanjutController;
 use App\Http\Controllers\UnduhDokumenController;
 use Illuminate\Support\Facades\Route;
@@ -56,6 +57,20 @@ Route::middleware(['auth', 'aktif'])->group(function (): void {
     Route::get('/dokumen/{dokumen}/unduh', UnduhDokumenController::class)
         ->middleware('izin:document.view')
         ->name('dokumen.unduh');
+
+    /*
+    |----------------------------------------------------------------------
+    | Pusat Notifikasi (Tahap 5)
+    |----------------------------------------------------------------------
+    |
+    | Notifikasi hanya milik akun sendiri, sehingga tidak dijaga izin modul:
+    | setiap akun aktif boleh membaca kotak masuknya. Rute statis
+    | `/notifikasi/baca-semua` didaftarkan sebelum rute berparameter.
+    |
+    */
+    Route::get('/notifikasi', [NotifikasiController::class, 'index'])->name('notifikasi.index');
+    Route::post('/notifikasi/baca-semua', [NotifikasiController::class, 'bacaSemua'])->name('notifikasi.baca-semua');
+    Route::post('/notifikasi/{notifikasi}/baca', [NotifikasiController::class, 'baca'])->name('notifikasi.baca');
 
     /*
     |----------------------------------------------------------------------

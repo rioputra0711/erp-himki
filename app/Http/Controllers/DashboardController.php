@@ -7,9 +7,11 @@ use App\Enums\PeranSistem;
 use App\Models\AuditEvent;
 use App\Models\User;
 use App\Support\CakupanPengguna;
+use App\Support\RingkasanTunggakan;
 use App\Support\ServerClock;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /**
  * Empat ruang kerja sesuai peran (fitur.pdf Tahap 2 — Auto-Routing Peran).
@@ -49,8 +51,28 @@ class DashboardController extends Controller
             'personel' => $pengguna?->personel,
             'waktuServer' => ServerClock::now(),
             'modul' => $this->ringkasanModul($pengguna),
+            'tunggakan' => $this->tunggakan($pengguna),
             'aktivitasTerakhir' => $this->aktivitasTerakhir($pengguna),
         ]);
+    }
+
+    /**
+     * Tunggakan operasional akun (fitur.pdf Tahap 5).
+     *
+     * @return array{tugas: Collection, tindakLanjut: Collection, arahan: Collection, jumlah: int}
+     */
+    private function tunggakan(?User $pengguna): array
+    {
+        if ($pengguna === null) {
+            return [
+                'tugas' => collect(),
+                'tindakLanjut' => collect(),
+                'arahan' => collect(),
+                'jumlah' => 0,
+            ];
+        }
+
+        return RingkasanTunggakan::untuk($pengguna);
     }
 
     /**
