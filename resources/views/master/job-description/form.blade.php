@@ -94,6 +94,20 @@
             </label>
         </div>
 
+        @if ($jd->exists && $jd->ditetapkan_pada === null)
+            <label class="block text-sm">
+                <span class="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Alasan perubahan
+                </span>
+                <textarea name="alasan" rows="2" maxlength="500"
+                          class="w-full rounded-lg border border-slate-300 px-3 py-1.5"
+                          placeholder="Wajib bila Anda mengubah target, indikator, uraian, kategori, frekuensi, atau tanggal berlaku.">{{ old('alasan') }}</textarea>
+                <span class="mt-1 block text-xs text-slate-500">
+                    Alasan tersimpan permanen pada jejak audit dan tidak dapat diubah setelahnya.
+                </span>
+            </label>
+        @endif
+
         <div class="flex items-center gap-2">
             <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
                 Simpan draf

@@ -59,6 +59,44 @@ class Assignment extends Model
         ];
     }
 
+    /**
+     * Status yang sudah diverifikasi tidak boleh berubah tanpa jejak alasan.
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return ['status', 'progres', 'tenggat', 'prioritas'];
+    }
+
+    protected function wajibAlasanUntuk(string $kolom, mixed $nilaiBaru): bool
+    {
+        $lama = $this->nilaiStatus($this->getOriginal('status'));
+        $baru = $this->nilaiStatus($nilaiBaru);
+
+        $lamaFinal = in_array($lama, [
+            StatusPenugasan::Terverifikasi->value,
+            StatusPenugasan::Ditutup->value,
+            StatusPenugasan::Dibatalkan->value,
+        ], true);
+
+        if ($kolom === 'status') {
+            return $lamaFinal || $baru === StatusPenugasan::Terverifikasi->value;
+        }
+
+        // Progres, tenggat, dan prioritas hanya dikunci setelah tugas final.
+        return $lamaFinal;
+    }
+
+    private function nilaiStatus(mixed $status): ?string
+    {
+        if ($status instanceof StatusPenugasan) {
+            return $status->value;
+        }
+
+        return $status === null ? null : (string) $status;
+    }
+
     protected static function booted(): void
     {
         static::creating(function (self $assignment): void {

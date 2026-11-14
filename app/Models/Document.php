@@ -48,6 +48,31 @@ class Document extends Model
         ];
     }
 
+    /**
+     * Mengubah status dokumen menjadi final/arsip atau mengubah tingkat
+     * kerahasiaan wajib beralasan (fitur.pdf Tahap 4).
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return ['status', 'klasifikasi'];
+    }
+
+    protected function wajibAlasanUntuk(string $kolom, mixed $nilaiBaru): bool
+    {
+        if ($kolom === 'klasifikasi') {
+            return true;
+        }
+
+        $baru = $nilaiBaru instanceof StatusDokumen ? $nilaiBaru->value : $nilaiBaru;
+
+        return in_array($baru, [
+            StatusDokumen::Final->value,
+            StatusDokumen::Diarsipkan->value,
+        ], true);
+    }
+
     protected function kolomPelapor(): string
     {
         return 'pemilik_id';

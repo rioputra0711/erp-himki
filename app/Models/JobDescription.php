@@ -74,6 +74,24 @@ class JobDescription extends Model
         'induk_id',
     ];
 
+    /**
+     * Target dan indikator beku setelah ditetapkan, jadi perubahan pada draf
+     * wajib beralasan agar tidak ada target yang bergeser diam-diam.
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return ['target', 'indikator', 'frekuensi', 'kategori', 'uraian', 'berlaku_mulai'];
+    }
+
+    protected function wajibAlasanUntuk(string $kolom, mixed $nilaiBaru): bool
+    {
+        // Setelah ditetapkan, perubahan sudah ditolak `booted()`; alasan hanya
+        // relevan selama baris masih berstatus draf.
+        return $this->ditetapkan_pada === null;
+    }
+
     protected static function booted(): void
     {
         static::saving(function (self $jd): void {

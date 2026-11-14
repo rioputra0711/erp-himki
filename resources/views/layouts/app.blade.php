@@ -29,6 +29,13 @@
                         Master Data
                     </a>
                 @endcan
+
+                @can('audit.view')
+                    <a href="{{ route('audit.index') }}"
+                       class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                        Audit Trail
+                    </a>
+                @endcan
             </nav>
 
             <div class="ml-auto flex items-center gap-3 text-sm">

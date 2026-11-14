@@ -50,6 +50,28 @@ class Report extends Model
         ];
     }
 
+    /**
+     * Verifikasi, penutupan, dan pembatalan laporan mengubah status resmi
+     * pekerjaan, sehingga wajib beralasan (fitur.pdf Tahap 4).
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return ['status'];
+    }
+
+    protected function wajibAlasanUntuk(string $kolom, mixed $nilaiBaru): bool
+    {
+        $baru = $nilaiBaru instanceof StatusLaporan ? $nilaiBaru->value : $nilaiBaru;
+
+        return in_array($baru, [
+            StatusLaporan::Terverifikasi->value,
+            StatusLaporan::Ditutup->value,
+            StatusLaporan::Dibatalkan->value,
+        ], true);
+    }
+
     protected static function booted(): void
     {
         static::saving(function (self $report): void {

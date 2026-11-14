@@ -55,6 +55,11 @@ final class CakupanPengguna
         return $user->hasRole(PeranSistem::Staf->value);
     }
 
+    public static function adalahDirekturEksekutif(User $user): bool
+    {
+        return $user->hasRole(PeranSistem::DirekturEksekutif->value);
+    }
+
     /**
      * Id baris `personel` milik akun ini (null bila akun belum tertaut personel).
      */

@@ -92,6 +92,30 @@ class KpiResult extends Model
         ];
     }
 
+    /**
+     * Skor, bobot, status, dan versi aturan menentukan nilai KPI resmi,
+     * sehingga setiap perubahan wajib beralasan (fitur.pdf Tahap 4).
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return [
+            'skor_pencapaian',
+            'skor_kualitas',
+            'skor_ketepatan_waktu',
+            'skor_tindak_lanjut',
+            'skor_kolaborasi',
+            'bobot_pencapaian',
+            'bobot_kualitas',
+            'bobot_ketepatan_waktu',
+            'bobot_tindak_lanjut',
+            'bobot_kolaborasi',
+            'status',
+            'rule_version',
+        ];
+    }
+
     protected static function booted(): void
     {
         static::saving(function (self $kpi): void {

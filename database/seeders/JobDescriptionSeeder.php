@@ -170,19 +170,26 @@ class JobDescriptionSeeder extends Seeder
                 continue;
             }
 
-            JobDescription::query()->updateOrCreate(
+            $jdModel = JobDescription::query()->firstOrNew(
                 ['jabatan_id' => $jabatanId, 'kode' => $jd['kode'], 'versi' => 1],
-                [
-                    'kategori' => $jd['kategori'],
-                    'uraian' => $jd['uraian'],
-                    'indikator' => $jd['indikator'],
-                    'target' => $jd['target'],
-                    'frekuensi' => $jd['frekuensi'],
-                    'berlaku_mulai' => $mulai->toDateString(),
-                    'ditetapkan_pada' => $mulai,
-                    'is_active' => true,
-                ]
             );
+
+            // Job Description yang sudah ditetapkan bersifat beku; seeder tidak
+            // boleh menimpanya (perubahan hanya lewat versi baru).
+            if ($jdModel->exists && $jdModel->ditetapkan_pada !== null) {
+                continue;
+            }
+
+            $jdModel->fill([
+                'kategori' => $jd['kategori'],
+                'uraian' => $jd['uraian'],
+                'indikator' => $jd['indikator'],
+                'target' => $jd['target'],
+                'frekuensi' => $jd['frekuensi'],
+                'berlaku_mulai' => $mulai->toDateString(),
+                'ditetapkan_pada' => $mulai,
+                'is_active' => true,
+            ])->denganAlasan('Data awal job description')->save();
         }
     }
 }

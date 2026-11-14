@@ -84,8 +84,11 @@ class MasterJobDescriptionController extends Controller
 
     public function store(SimpanJobDescriptionRequest $request): RedirectResponse
     {
+        $data = $request->validated();
+        unset($data['alasan']);
+
         $jd = JobDescription::query()->create([
-            ...$request->validated(),
+            ...$data,
             'versi' => 1,
             'is_active' => true,
         ]);
@@ -110,7 +113,17 @@ class MasterJobDescriptionController extends Controller
 
     public function update(SimpanJobDescriptionRequest $request, JobDescription $jobDescription): RedirectResponse
     {
-        $jobDescription->update($request->validated());
+        $data = $request->validated();
+        $alasan = $data['alasan'] ?? null;
+        unset($data['alasan']);
+
+        $jobDescription->fill($data);
+
+        if ($alasan !== null) {
+            $jobDescription->denganAlasan($alasan);
+        }
+
+        $jobDescription->save();
 
         return redirect()
             ->route('master.jd.show', $jobDescription)

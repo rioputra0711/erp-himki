@@ -18,13 +18,19 @@ class AuditEventPolicy
     }
 
     /**
-     * Audit trail tidak dapat diubah atau dihapus siapa pun, termasuk admin.
+     * Satu baris jejak hanya boleh dibuka bila berada dalam cakupan akun.
+     *
+     * Penyaringan daftar saja tidak cukup: tanpa pemeriksaan baris, Direktur
+     * Eksekutif masih bisa membuka peristiwa keamanan lewat URL langsung.
      */
     public function view(User $user, AuditEvent $event): bool
     {
-        return $this->boleh($user, AksiIzin::Lihat);
+        return $this->boleh($user, AksiIzin::Lihat) && $event->terlihatOleh($user);
     }
 
+    /**
+     * Audit trail tidak dapat diubah atau dihapus siapa pun, termasuk admin.
+     */
     public function create(User $user): bool
     {
         return false;

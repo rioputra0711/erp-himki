@@ -45,6 +45,8 @@ final class PencatatAudit
         try {
             AuditEvent::create([
                 'actor_id' => $actor?->getKey(),
+                'actor_nama' => $actor?->name,
+                'actor_peran' => $actor?->peranSistem()?->value,
                 'event' => $event,
                 'before' => $before,
                 'after' => $after,

@@ -103,7 +103,8 @@ class PeranIzinSeeder extends Seeder
 
     /**
      * DE: kendali operasional penuh termasuk penilaian, kecuali konfigurasi KPI
-     * dan administrasi akun.
+     * dan administrasi akun. Audit hanya baca dan hanya peristiwa operasional
+     * (lihat AuditEvent::scopeTerlihatOleh).
      *
      * @return list<string>
      */
@@ -130,6 +131,9 @@ class PeranIzinSeeder extends Seeder
                 $izin[] = $modul->izin($aksi);
             }
         }
+
+        // Audit: baca saja. Ekspor tetap wewenang Administrator.
+        $izin[] = ModulAplikasi::Audit->izin(AksiIzin::Lihat);
 
         return $izin;
     }

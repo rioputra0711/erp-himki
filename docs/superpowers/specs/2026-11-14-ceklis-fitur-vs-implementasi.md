@@ -1,6 +1,6 @@
 # Ceklis Fitur — `fitur.pdf` vs Implementasi
 
-Diperiksa: 14 Nov 2026, database `erp_himki_baru` (MariaDB 10.4.32), 55 test lulus (276 asersi).
+Diperiksa: 14 Nov 2026, database `erp_himki_baru` (MariaDB 10.4.32), 76 test lulus (337 asersi).
 Sumber acuan: `C:\Users\rio\Downloads\fitur.pdf` (matriks 4 peran + 12 tahap pembangunan).
 
 ## Legenda
@@ -11,10 +11,12 @@ Sumber acuan: `C:\Users\rio\Downloads\fitur.pdf` (matriks 4 peran + 12 tahap pem
 | 🟡 | Fondasi database siap; alur/UI/controller belum ada |
 | ⬜ | Belum ada sama sekali |
 
-Cakupan yang dibangun saat ini adalah **Tahap 1, Tahap 2, dan Tahap 3**. Butir Tahap 2 kini ✅ karena
+Cakupan yang dibangun saat ini adalah **Tahap 1, Tahap 2, Tahap 3, dan Tahap 4**. Butir Tahap 2 kini ✅ karena
 gerbang login, auto-routing peran, dan middleware RBAC server-side sudah berjalan dan diuji.
 Butir Tahap 3 kini ✅ karena Master Personel, Jabatan, Bidang, dan Job Description sudah punya
 layar, Policy, FormRequest, dan penguncian identitas otomatis.
+Butir Tahap 4 kini ✅ karena jejak audit sudah append-only di tiga lapis (model, trigger DB, Policy),
+alasan wajib ditegakkan di level model, dan layar penelusuran `/audit` sudah ada.
 Fitur layar lain tetap 🟡: gerbang otorisasi untuk setiap aksi (create/read/update/verify/export)
 sudah aktif dan diuji, tetapi layar operasionalnya dibangun pada tahap berikutnya.
 Kolom 🟡 berarti tabel, kolom, enum, relasi, atau aturan model sudah ada sehingga fitur
@@ -29,7 +31,7 @@ tinggal dibangun di atasnya tanpa migrasi baru.
 | 1 | Skema 14 entitas, relasi & atribut kunci, standarisasi zona waktu | ✅ | 29 tabel, 48 FK, 41 CHECK native, 2 trigger audit, `ServerClock`, test `SkemaTahap1Test` |
 | 2 | Gerbang login, auto-routing peran, middleware RBAC | ✅ | Fortify headless (login email/username, tanpa registrasi publik, reset sandi), 4 ruang kerja per peran, 56 izin × 4 peran, middleware `peran`/`izin`/`izin_modul`/`aktif`, 12 Policy inti, sesi DB + pencabutan sesi lain, lockout 429, audit `auth.*`, test `Tahap2AutentikasiRbacTest` (21 asersi) |
 | 3 | Master personel & jabatan, kunci identitas otomatis, master job description | ✅ | Layar `/master/personel` (daftar/filter/cari/urut, detail, tambah, ubah, nonaktifkan + alasan wajib), `/master/jabatan`, `/master/bidang`, `/master/job-description` (draf → tetapkan → arsip → versi baru). 6 bidang resmi (Keuangan, Administrasi, Publikasi, HI/Pameran, TI, Operasional). Kunci identitas: trait `MilikSesiPelapor` pada `Report`/`ActivityLog`/`Document` + `IdentitasPelapor`. Izin ke-56 `personel.configure` (khusus Admin) memisahkan draf DE dari penetapan. Audit `identitas.ditolak` untuk percobaan pemalsuan. Test `Tahap3MasterPersonelTest` (14 tes, 105 asersi) |
-| 4 | Audit trail append-only, rekam jejak perubahan | 🟡 | Tabel + trigger tolak UPDATE/DELETE + trait `Auditable` pada 11 model (ActionItem, Assignment, Bidang, Document, Feedback, Jabatan, JobDescription, KpiResult, Personel, Report, Review). **Celah:** `Meeting` belum diaudit; `reason` belum wajib saat ubah skor/bobot |
+| 4 | Audit trail append-only, rekam jejak perubahan | ✅ | Append-only di tiga lapis: `AuditEvent::booted()` menolak `updating`/`deleting`, trigger DB menolak `UPDATE`/`DELETE` termasuk SQL langsung, `AuditEventPolicy::create/update/delete` mengembalikan `false` untuk **semua** peran termasuk Administrator. Trait `Auditable` pada 12 model (termasuk `Meeting`). Alasan wajib ditegakkan di level model (`kolomWajibAlasan()`/`wajibAlasanUntuk()`) untuk skor & bobot `Review`, skor/bobot/status `KpiResult`, target/indikator JD, status final `Assignment`, verifikasi `Report`, finalisasi/klasifikasi `Document`. Snapshot pelaku `actor_nama`/`actor_peran`; `actor_id` `restrictOnDelete`. Perubahan peran/izin dicatat lewat listener `CatatPerubahanAkses` (`akses.*`, hanya bila ada sesi login). Layar `/audit` (filter 8 kolom, detail before/after, ekspor CSV 5.000 baris + `ekspor.audit`); DE hanya peristiwa operasional, ekspor khusus Admin. Test `Tahap4AuditTrailTest` (21 tes, 61 asersi) |
 | 5 | Formulir penugasan, 3 jalur arahan, arahan & action items, state machine tugas | 🟡 | Kolom lengkap: `sumber_perintah` (3 nilai), `pemberi_tugas_id`, `diteruskan_oleh_id`, `pic_id`, `kategori` (4), `prioritas` (4), `target_keluaran`, `tenggat`, `dependensi_id`. **Celah:** transisi status belum dikunci di DB; hanya enum + guard batal/verifikasi |
 | 6 | Log aktivitas harian, atribut log, early warning | 🟡 | `activity_logs` wajib tertaut ke `assignment_id` atau `job_description_id` (CHECK `sumber_terkait`), `progres`, `durasi_menit`, `kendala`, `is_kendala_dini` |
 | 7 | Repositori dokumen & versi, proteksi & klasifikasi, SLA register rapat | 🟡 | `documents` (versi, induk_id, 4 status, 3 klasifikasi, checksum), `meetings` (SLA +1j/+16j otomatis, 2 status risalah). **Celah:** belum ada guard larangan hapus dokumen Final/Diarsipkan. Otorisasi unduh per klasifikasi sudah aktif (`DocumentPolicy::download` + rute `dokumen.unduh`) |
@@ -65,7 +67,7 @@ tinggal dibangun di atasnya tanpa migrasi baru.
 | 18 | Tombol Buat Arahan | 🟡 | `feedback` + `action_items`; notifikasi belum |
 | 19 | Tabel Job Description | ✅ | `/master/job-description` — daftar per jabatan dengan target, indikator, frekuensi, versi, dan status penetapan (dibuka dari menu Master Data) |
 | 20 | Tabel Evaluasi KPI | 🟡 | `kpi_results` |
-| 21 | Tabel Audit Trail | 🟡 | `audit_events` append-only; kini juga memuat peristiwa `auth.*` (login, login gagal, logout, akses ditolak, blokir). `Meeting` belum diaudit |
+| 21 | Tabel Audit Trail | ✅ | `/audit` — daftar + filter (tindakan, objek, pelaku, rentang tanggal, urutan), detail before/after, ekspor CSV. `audit_events` append-only di tiga lapis; `Meeting` ikut diaudit; alasan wajib pada perubahan sensitif |
 
 ## C. Dashboard Direktur Eksekutif (27 fitur)
 
@@ -97,7 +99,7 @@ tinggal dibangun di atasnya tanpa migrasi baru.
 | 24 | Menu Job Description | ✅ | `/master/job-description` — DE membaca seluruh JD dan boleh menyusun draf, tetapi penetapan tetap milik Admin (`personel.configure`) |
 | 25 | Modul Evaluasi KPI | 🟡 | `kpi_results` + `klarifikasi` + kunci Final |
 | 26 | Tabel Struktur Personel | ✅ | `/master/personel` + `/master/jabatan` + `/master/bidang`: daftar, filter bidang/kategori/status, urut, detail, jejak audit |
-| 27 | Tabel Audit Trail Operasional | 🟡 | `audit_events` |
+| 27 | Tabel Audit Trail Operasional | ✅ | `/audit` — DE memegang `audit.view` dan hanya melihat peristiwa operasional (tugas, log, laporan, dokumen, review, feedback, action item, KPI, rapat). Jejak keamanan (`auth.*`), perubahan hak akses (`akses.*`), master personel, dan akun tidak terlihat; membuka URL langsung ditolak `AuditEventPolicy::view`. Ekspor tetap milik Admin |
 
 ## D. Dashboard Personel BE (17 fitur)
 
@@ -134,7 +136,7 @@ tinggal dibangun di atasnya tanpa migrasi baru.
 | 7 | Master Job Description | ✅ | `/master/job-description`: daftar per jabatan, detail, draf (DE/Admin), penetapan target+indikator+frekuensi+`berlaku_mulai` oleh Admin (alasan wajib), arsip, versi baru. Baris yang ditetapkan terkunci di level model; revisi = versi baru |
 | 8 | Konfigurasi Rumus Berversi | 🟡 | `rule_version` + kolom bobot per baris; versi kebijakan per jabatan belum |
 | 9 | Panel Backup & Recovery | ⬜ | belum ada |
-| 10 | Modul Audit Trail Sistem | 🟡 | `audit_events` append-only, izin `audit.view/export` (Pengurus & Admin), peristiwa `auth.*` tercatat |
+| 10 | Modul Audit Trail Sistem | ✅ | `/audit` (daftar, filter, detail before/after) + `/audit/ekspor` (CSV 5.000 baris, mencatat `ekspor.audit`). Append-only di tiga lapis — Administrator pun tidak bisa mengubah/menghapus baris. Kewajiban hak DB produksi (tanpa `DELETE`/`TRUNCATE` pada `audit_events`) tercatat di `docs/operasional/keamanan-audit.md` |
 
 ---
 
@@ -143,12 +145,13 @@ tinggal dibangun di atasnya tanpa migrasi baru.
 | Kategori | Jumlah |
 |---|---|
 | Fitur layar di `fitur.pdf` | 75 (Pengurus 21, DE 27, Staf 17, Admin 10) |
-| ✅ selesai penuh | 6 (Pengurus 1, DE 2, Staf 1, Admin 2) |
-| 🟡 fondasi database + gerbang RBAC siap | 61 (Pengurus 17, DE 22, Staf 16, Admin 6) |
+| ✅ selesai penuh | 9 (Pengurus 2, DE 3, Staf 1, Admin 3) |
+| 🟡 fondasi database + gerbang RBAC siap | 58 (Pengurus 16, DE 21, Staf 16, Admin 5) |
 | ⬜ belum ada | 8 (Pengurus 3, DE 3, Staf 0, Admin 2) |
 | Butir Tahap 1 (skema/relasi/zona waktu) | 3 dari 3 ✅ |
 | Butir Tahap 2 (login/routing/RBAC) | 1 dari 1 ✅ |
 | Butir Tahap 3 (master personel/jabatan/JD) | 1 dari 1 ✅ |
+| Butir Tahap 4 (audit trail append-only) | 1 dari 1 ✅ |
 
 8 fitur ⬜: Indikator Last Updated (Pengurus, DE), Indikator Evaluasi Bulanan (Pengurus,
 DE), Filter Pencarian Data, Notifikasi Instruksi Pengurus, Panel Status Teknis, Panel Backup
@@ -157,17 +160,20 @@ DE), Filter Pencarian Data, Notifikasi Instruksi Pengurus, Panel Status Teknis, 
 ## G. Celah yang masih terbuka
 
 Tahap 2 menutup celah "belum ada pengecekan server-side". Tahap 3 menutup celah "identitas
-pelapor bisa dipalsukan" dan "standar evaluasi bisa berubah di tengah periode". Yang tersisa:
+pelapor bisa dipalsukan" dan "standar evaluasi bisa berubah di tengah periode". Tahap 4
+menutup celah "perubahan skor/bobot/status terverifikasi tanpa alasan" dan "rapat tidak
+teraudit". Yang tersisa:
 
-1. **`reason` wajib** saat mengubah skor/bobot/status terverifikasi (Tahap 4). Saat ini alasan
-   wajib hanya pada nonaktifkan personel/jabatan/bidang, penetapan & pengarsipan JD, dan versi baru JD.
-2. **`Meeting` belum memakai trait `Auditable`** padahal risalah wajib diaudit.
-3. **Guard hapus dokumen Final/Diarsipkan** belum ada di model maupun DB.
-4. **Transisi status** masih bebas; state machine belum ditegakkan.
-5. **Action item otomatis** untuk laporan skor < 70 belum dibuat.
-6. **Isi ekspor masih placeholder** — rute dan izin `export` sudah benar, rekapitulasi rinci
-   menyusul di Tahap 11.
-7. **Layar operasional 12 modul** belum ada; baru gerbang otorisasi + tabel wewenang.
-8. **Akun tanpa baris Master Personel** ditolak saat mengirim laporan (trait `MilikSesiPelapor`),
+1. **Guard hapus dokumen Final/Diarsipkan** belum ada di model maupun DB.
+2. **Transisi status** masih bebas; state machine belum ditegakkan.
+3. **Action item otomatis** untuk laporan skor < 70 belum dibuat.
+4. **Isi ekspor modul lain masih placeholder** — rute dan izin `export` sudah benar, dan
+   ekspor audit (`/audit/ekspor`) sudah berisi baris nyata; rekapitulasi rinci 11 modul
+   lain menyusul di Tahap 11.
+5. **Layar operasional 12 modul** belum ada; baru gerbang otorisasi + tabel wewenang.
+6. **Akun tanpa baris Master Personel** ditolak saat mengirim laporan (trait `MilikSesiPelapor`),
    tetapi belum ada layar penautan massal akun → personel; saat ini lewat `/master/personel` satu per satu.
-9. **UI konfigurasi RBAC** belum ada; matriks izin masih diatur lewat `PeranIzinSeeder`.
+7. **UI konfigurasi RBAC** belum ada; matriks izin masih diatur lewat `PeranIzinSeeder`.
+8. **`TRUNCATE` pada `audit_events` tidak dapat dicegah trigger** MySQL/MariaDB. Selama
+   pengembangan aplikasi memakai `root`; di produksi wajib memakai akun aplikasi tanpa hak
+   `DELETE`/`TRUNCATE` (lihat `docs/operasional/keamanan-audit.md`).

@@ -8,6 +8,7 @@ use App\Support\CakupanPengguna;
 use App\Support\PencatatAudit;
 use App\Support\ServerClock;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -20,10 +21,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class EksporController extends Controller
 {
-    public function unduh(Request $request, string $modul): StreamedResponse
+    public function unduh(Request $request, string $modul): StreamedResponse|RedirectResponse
     {
         $modulEnum = ModulAplikasi::from($modul);
         $pengguna = $request->user();
+
+        // Audit punya permukaan ekspor sendiri yang berisi baris audit nyata;
+        // rute generik hanya mengalihkan agar tidak ada dua sumber berbeda.
+        if ($modulEnum === ModulAplikasi::Audit) {
+            return redirect()->route('audit.ekspor', $request->query());
+        }
 
         PencatatAudit::catat(
             event: 'ekspor.'.$modulEnum->value,

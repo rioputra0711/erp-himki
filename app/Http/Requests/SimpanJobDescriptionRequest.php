@@ -53,7 +53,35 @@ class SimpanJobDescriptionRequest extends FormRequest
             'target' => ['nullable', 'string', 'max:2000'],
             'frekuensi' => ['nullable', Rule::enum(FrekuensiTugas::class)],
             'berlaku_mulai' => ['nullable', 'date', 'after_or_equal:'.ServerClock::now()->toDateString()],
+            'alasan' => [
+                Rule::requiredIf(fn (): bool => $jd instanceof JobDescription && $this->adaPerubahanSensitif($jd)),
+                'nullable',
+                'string',
+                'min:10',
+                'max:500',
+            ],
         ];
+    }
+
+    /**
+     * Apakah formulir ini menyentuh kolom yang perubahannya wajib alasan.
+     *
+     * Hanya berlaku untuk draf: setelah ditetapkan, perubahan sudah ditolak
+     * seluruhnya oleh model (harus lewat versi baru).
+     */
+    private function adaPerubahanSensitif(JobDescription $jd): bool
+    {
+        if ($jd->ditetapkan_pada !== null) {
+            return false;
+        }
+
+        foreach (['target', 'indikator', 'frekuensi', 'kategori', 'uraian', 'berlaku_mulai'] as $kolom) {
+            if ((string) $this->input($kolom) !== (string) $jd->getRawOriginal($kolom)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -70,6 +98,7 @@ class SimpanJobDescriptionRequest extends FormRequest
             'target' => 'target dasar',
             'frekuensi' => 'frekuensi pelaporan',
             'berlaku_mulai' => 'berlaku mulai',
+            'alasan' => 'alasan perubahan',
         ];
     }
 
@@ -81,6 +110,7 @@ class SimpanJobDescriptionRequest extends FormRequest
         return [
             'kode.regex' => 'Kode hanya boleh huruf kapital, angka, dan tanda hubung.',
             'berlaku_mulai.after_or_equal' => 'Versi baru harus berlaku mulai hari ini atau setelahnya.',
+            'alasan.required' => 'Perubahan target, indikator, uraian, kategori, frekuensi, atau tanggal berlaku wajib menyertakan alasan.',
         ];
     }
 }

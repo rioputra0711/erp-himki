@@ -75,6 +75,29 @@ class Review extends Model
         ];
     }
 
+    /**
+     * Skor dan bobot menentukan nilai akhir personel, sehingga setiap
+     * perubahan wajib beralasan (fitur.pdf Tahap 4).
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return [
+            'skor_kelengkapan',
+            'skor_kejelasan',
+            'skor_akurasi',
+            'skor_sistematika',
+            'skor_tindak_lanjut',
+            'bobot_kelengkapan',
+            'bobot_kejelasan',
+            'bobot_akurasi',
+            'bobot_sistematika',
+            'bobot_tindak_lanjut',
+            'adalah_final',
+        ];
+    }
+
     protected static function booted(): void
     {
         static::saving(function (self $review): void {

@@ -4,12 +4,18 @@ namespace App\Providers;
 
 use App\Enums\AksiIzin;
 use App\Enums\ModulAplikasi;
+use App\Listeners\CatatPerubahanAkses;
 use App\Models\User;
 use App\Support\CakupanPengguna;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Spatie\Permission\Events\PermissionAttached;
+use Spatie\Permission\Events\PermissionDetached;
+use Spatie\Permission\Events\RoleAttached;
+use Spatie\Permission\Events\RoleDetached;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,6 +51,13 @@ class AppServiceProvider extends ServiceProvider
             return null;
         });
 
+        // Perubahan hak akses dicatat ke jejak audit (fitur.pdf Tahap 4).
+        // Hanya terjadi bila ada sesi login; seeder/artisan tidak menghasilkan baris.
+        Event::listen(
+            [RoleAttached::class, RoleDetached::class, PermissionAttached::class, PermissionDetached::class],
+            CatatPerubahanAkses::class,
+        );
+
         // Navigasi hanya memuat menu yang benar-benar boleh dibuka akun ini.
         View::composer('layouts.app', function ($view): void {
             $pengguna = auth()->user();
@@ -52,6 +65,11 @@ class AppServiceProvider extends ServiceProvider
 
             if ($pengguna instanceof User) {
                 foreach (ModulAplikasi::cases() as $modul) {
+                    // Audit punya layar penelusuran tersendiri; tautannya di bawah.
+                    if ($modul === ModulAplikasi::Audit) {
+                        continue;
+                    }
+
                     if (CakupanPengguna::boleh($pengguna, $modul, AksiIzin::Lihat)) {
                         $navigasi[] = $modul;
                     }

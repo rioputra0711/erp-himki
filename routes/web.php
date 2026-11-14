@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BerandaController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EksporController;
@@ -52,6 +53,26 @@ Route::middleware(['auth', 'aktif'])->group(function (): void {
     Route::get('/dokumen/{dokumen}/unduh', UnduhDokumenController::class)
         ->middleware('izin:document.view')
         ->name('dokumen.unduh');
+
+    /*
+    |----------------------------------------------------------------------
+    | Layanan Audit Trail (Tahap 4)
+    |----------------------------------------------------------------------
+    |
+    | Hanya baca. Rute ekspor statis didaftarkan sebelum rute berparameter agar
+    | `/audit/ekspor` tidak tertangkap sebagai id peristiwa.
+    |
+    */
+    Route::get('/audit/ekspor', [AuditController::class, 'ekspor'])
+        ->middleware('izin:audit.export')
+        ->name('audit.ekspor');
+
+    Route::middleware('izin:audit.view')->group(function (): void {
+        Route::get('/audit', [AuditController::class, 'index'])->name('audit.index');
+        Route::get('/audit/{auditEvent}', [AuditController::class, 'show'])
+            ->whereNumber('auditEvent')
+            ->name('audit.show');
+    });
 
     /*
     |----------------------------------------------------------------------

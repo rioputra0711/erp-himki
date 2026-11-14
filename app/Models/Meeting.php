@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\StatusRisalah;
+use App\Models\Concerns\Auditable;
 use App\Support\ServerClock;
 use Database\Factories\MeetingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Meeting extends Model
 {
     /** @use HasFactory<MeetingFactory> */
-    use HasFactory;
+    use Auditable, HasFactory;
 
     protected $fillable = [
         'judul',
