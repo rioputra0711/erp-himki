@@ -16,6 +16,11 @@ use App\Models\Assignment;
 use App\Models\Feedback;
 use App\Models\Personel;
 use App\Models\User;
+use App\Notifications\ArahanBaru;
+use App\Notifications\ArahanDiteruskan;
+use App\Notifications\PenugasanBaru;
+use App\Notifications\PenugasanDiverifikasi;
+use App\Notifications\TindakLanjutBaru;
 use App\Support\PengirimNotifikasi;
 use App\Support\RingkasanTunggakan;
 use App\Support\ServerClock;
@@ -1126,5 +1131,198 @@ class Tahap5PenugasanTest extends TestCase
             ->get(route('admin.dashboard'))
             ->assertOk()
             ->assertSee('Tidak ada tunggakan.');
+    }
+
+    // ----------------------------- 15. Sisa kriteria penerimaan (desain §12)
+
+    #[Test]
+    public function pembatalan_tanpa_bukti_ditolak_model_dan_check_database(): void
+    {
+        $tugas = Assignment::factory()->create(['status' => StatusPenugasan::Aktif]);
+
+        try {
+            $tugas->denganAlasan('Dibatalkan karena prioritas berubah')
+                ->update([
+                    'status' => StatusPenugasan::Dibatalkan,
+                    'alasan_pembatalan' => 'Prioritas berubah',
+                ]);
+            $this->fail('Pembatalan tanpa bukti seharusnya ditolak model.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('bukti pembatalan', $e->getMessage());
+        }
+
+        $pesan = $this->tolak(tambah: fn () => DB::table('assignments')->where('id', $tugas->id)->update([
+            'status' => 'dibatalkan',
+            'alasan_pembatalan' => 'Prioritas berubah',
+            'bukti_pembatalan' => null,
+        ]), penanda: 'assignments_pembatalan_bukti');
+
+        $this->assertStringContainsString('assignments_pembatalan_bukti', $pesan);
+    }
+
+    #[Test]
+    public function terhambat_wajib_kendala_dan_pengajuan_selesai_wajib_progres_penuh(): void
+    {
+        $terhambat = Assignment::factory()->create([
+            'status' => StatusPenugasan::Aktif,
+            'kendala' => null,
+        ]);
+
+        try {
+            $terhambat->update(['status' => StatusPenugasan::Terhambat]);
+            $this->fail('Status terhambat tanpa kendala seharusnya ditolak.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('kendala', $e->getMessage());
+        }
+
+        $selesai = Assignment::factory()->create([
+            'status' => StatusPenugasan::DalamProses,
+            'progres' => 60,
+        ]);
+
+        try {
+            $selesai->update(['status' => StatusPenugasan::DiajukanSelesai]);
+            $this->fail('Pengajuan selesai dengan progres di bawah 100 seharusnya ditolak.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('100', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function verifikasi_mengisi_verifikator_dari_sesi(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelDe = Personel::factory()->create(['user_id' => $de->id]);
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::DiajukanSelesai,
+            'progres' => 100,
+        ]);
+
+        $this->actingAs($de)
+            ->patch(route('tugas.verifikasi', $tugas), ['alasan' => 'Seluruh keluaran sesuai target.'])
+            ->assertRedirect();
+
+        $segar = $tugas->fresh();
+
+        $this->assertSame((int) $personelDe->id, (int) $segar->diverifikasi_oleh);
+        $this->assertNotNull($segar->diverifikasi_pada);
+    }
+
+    #[Test]
+    public function kelima_kelas_notifikasi_terkirim_ke_penerima_yang_benar(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $personelPengurus = Personel::factory()->create(['user_id' => $pengurus->id]);
+        $staf = $this->akun(PeranSistem::Staf);
+        $personelStaf = Personel::factory()->create(['user_id' => $staf->id, 'status_aktif' => true]);
+
+        $tugas = Assignment::factory()->create([
+            'pic_id' => $personelStaf->id,
+            'pemberi_tugas_id' => $personelPengurus->id,
+            'sumber_perintah' => SumberPerintah::PengurusLangsung,
+        ]);
+
+        $arahan = Feedback::factory()->create([
+            'pemberi_id' => $personelPengurus->id,
+            'penerima_id' => $personelStaf->id,
+            'asal' => AsalFeedback::Pengurus,
+            'jenis' => JenisFeedback::Arahan,
+        ]);
+
+        $terusan = Assignment::factory()->create([
+            'pic_id' => $personelStaf->id,
+            'sumber_arahan_id' => $arahan->id,
+        ]);
+
+        $item = ActionItem::factory()->create(['pic_id' => $personelStaf->id]);
+
+        $notifikasi = app(PengirimNotifikasi::class);
+        $notifikasi->penugasanBaru($tugas);
+        $notifikasi->penugasanDiverifikasi($tugas);
+        $notifikasi->arahanBaru($arahan);
+        $notifikasi->arahanDiteruskan($terusan);
+        $notifikasi->tindakLanjutBaru($item);
+
+        $jenisStaf = $staf->notifications()->pluck('type')->all();
+
+        $this->assertContains(PenugasanBaru::class, $jenisStaf);
+        $this->assertContains(PenugasanDiverifikasi::class, $jenisStaf);
+        $this->assertContains(ArahanBaru::class, $jenisStaf);
+        $this->assertContains(TindakLanjutBaru::class, $jenisStaf);
+
+        // Pengurus pemberi arahan menerima kabar bahwa arahannya diteruskan.
+        $this->assertContains(
+            ArahanDiteruskan::class,
+            $pengurus->notifications()->pluck('type')->all(),
+        );
+    }
+
+    #[Test]
+    public function alasan_audit_hanya_berlaku_untuk_satu_perubahan(): void
+    {
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::Terverifikasi,
+            'progres' => 100,
+        ]);
+
+        $tugas->denganAlasan('Tenggat disesuaikan hasil rapat.')
+            ->update(['tenggat' => ServerClock::now()->addDays(10)]);
+
+        try {
+            $tugas->update(['tenggat' => ServerClock::now()->addDays(12)]);
+            $this->fail('Perubahan kedua tanpa alasan seharusnya ditolak.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('alasan', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function dependensi_melingkar_ditolak_lewat_formulir(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelDe = Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create(['status_aktif' => true]);
+
+        $awal = Assignment::factory()->create([
+            'status' => StatusPenugasan::Draft,
+            'pic_id' => $pic->id,
+            'pemberi_tugas_id' => $personelDe->id,
+        ]);
+        $tengah = Assignment::factory()->create([
+            'status' => StatusPenugasan::Draft,
+            'pic_id' => $pic->id,
+            'pemberi_tugas_id' => $personelDe->id,
+            'dependensi_id' => $awal->id,
+        ]);
+
+        $this->actingAs($de)
+            ->put(route('tugas.update', $awal), [
+                'judul' => $awal->judul,
+                'deskripsi' => $awal->deskripsi,
+                'pic_id' => $pic->id,
+                'kategori' => $awal->kategori->value,
+                'target_keluaran' => $awal->target_keluaran,
+                'prioritas' => $awal->prioritas->value,
+                'tanggal_mulai' => $awal->tanggal_mulai->toDateString(),
+                'tenggat' => $awal->tenggat->format('Y-m-d H:i:s'),
+                'dependensi_id' => $tengah->id,
+                'alasan' => 'Menautkan dependensi.',
+            ])
+            ->assertSessionHasErrors('dependensi_id');
+    }
+
+    #[Test]
+    public function kode_tugas_berurutan_dan_unik(): void
+    {
+        $tahun = ServerClock::now()->year;
+
+        $pertama = Assignment::factory()->create();
+        $kedua = Assignment::factory()->create();
+
+        $this->assertSame(sprintf('TGS-%d-0001', $tahun), $pertama->kode);
+        $this->assertSame(sprintf('TGS-%d-0002', $tahun), $kedua->kode);
+        $this->assertNotSame($pertama->kode, $kedua->kode);
     }
 }
