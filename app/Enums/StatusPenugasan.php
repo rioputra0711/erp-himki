@@ -31,4 +31,23 @@ enum StatusPenugasan: string
     {
         return in_array($this, [self::Terverifikasi, self::Ditutup, self::Dibatalkan], true);
     }
+
+    /**
+     * Peta transisi yang sah. `Terverifikasi` dan `Ditutup` sengaja hanya
+     * dapat dicapai lewat jalur pemeriksaan, bukan langsung dari status kerja.
+     *
+     * @return list<self>
+     */
+    public function bolehKe(self $tujuan): bool
+    {
+        return in_array($tujuan, match ($this) {
+            self::Draft => [self::Aktif, self::Dibatalkan],
+            self::Aktif => [self::DalamProses, self::Terhambat, self::Dibatalkan],
+            self::DalamProses => [self::Terhambat, self::DiajukanSelesai, self::Dibatalkan],
+            self::Terhambat => [self::DalamProses, self::DiajukanSelesai, self::Dibatalkan],
+            self::DiajukanSelesai => [self::DalamProses, self::Terverifikasi, self::Dibatalkan],
+            self::Terverifikasi => [self::Ditutup],
+            self::Ditutup, self::Dibatalkan => [],
+        }, true);
+    }
 }

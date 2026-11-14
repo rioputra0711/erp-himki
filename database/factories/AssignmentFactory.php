@@ -48,6 +48,7 @@ class AssignmentFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'status' => StatusPenugasan::Dibatalkan,
             'alasan_pembatalan' => fake()->sentence(8),
+            'bukti_pembatalan' => 'Nota pembatalan '.fake()->numerify('###/HIMKI/XI/2026'),
         ]);
     }
 }

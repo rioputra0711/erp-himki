@@ -13,6 +13,7 @@ use App\Models\Document;
 use App\Models\JobDescription;
 use App\Models\KpiResult;
 use App\Models\Meeting;
+use App\Models\Personel;
 use App\Models\Report;
 use App\Models\Review;
 use App\Models\User;
@@ -228,8 +229,9 @@ class Tahap4AuditTrailTest extends TestCase
     #[Test]
     public function status_tugas_final_wajib_alasan_sedangkan_progres_biasa_tidak(): void
     {
-        $admin = $this->akun(PeranSistem::Admin);
-        $this->actingAs($admin);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $this->actingAs($de);
 
         $biasa = Assignment::factory()->create(['status' => StatusPenugasan::Aktif]);
         $biasa->status = StatusPenugasan::DalamProses;
@@ -238,20 +240,29 @@ class Tahap4AuditTrailTest extends TestCase
 
         $this->assertSame(StatusPenugasan::DalamProses, $biasa->fresh()->status);
 
-        $final = Assignment::factory()->create(['status' => StatusPenugasan::Terverifikasi]);
+        // Syarat bukti penutupan sudah lengkap supaya yang diuji murni kewajiban
+        // alasan audit, bukan penjaga Tahap 5.
+        $final = Assignment::factory()->create([
+            'status' => StatusPenugasan::Terverifikasi,
+            'progres' => 100,
+            'alasan_penutupan' => 'Ruang lingkup tahap selesai',
+            'bukti_penutupan' => 'Berita acara 01/HIMKI/XI/2026',
+        ]);
+
         $final->status = StatusPenugasan::Ditutup;
 
         try {
             $final->save();
-            $this->fail('Perubahan status final tanpa alasan seharusnya ditolak.');
-        } catch (DomainException) {
-            // sesuai harapan
+            $this->fail('Perubahan status final tanpa alasan audit seharusnya ditolak.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('alasan', mb_strtolower($e->getMessage()));
         }
 
-        $final->progres = 100;
+        $this->assertSame(StatusPenugasan::Terverifikasi, $final->fresh()->status);
 
-        $this->expectException(DomainException::class);
-        $final->save();
+        $final->denganAlasan('Hasil kerja diterima')->save();
+
+        $this->assertSame(StatusPenugasan::Ditutup, $final->fresh()->status);
     }
 
     #[Test]

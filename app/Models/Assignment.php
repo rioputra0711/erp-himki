@@ -7,13 +7,17 @@ use App\Enums\PrioritasTugas;
 use App\Enums\StatusPenugasan;
 use App\Enums\SumberPerintah;
 use App\Models\Concerns\Auditable;
+use App\Support\CakupanPengguna;
+use App\Support\IdentitasPelapor;
 use App\Support\ServerClock;
 use Database\Factories\AssignmentFactory;
+use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Auth;
 
 class Assignment extends Model
 {
@@ -81,7 +85,11 @@ class Assignment extends Model
         ], true);
 
         if ($kolom === 'status') {
-            return $lamaFinal || $baru === StatusPenugasan::Terverifikasi->value;
+            return $lamaFinal || in_array($baru, [
+                StatusPenugasan::Terverifikasi->value,
+                StatusPenugasan::Ditutup->value,
+                StatusPenugasan::Dibatalkan->value,
+            ], true);
         }
 
         // Progres, tenggat, dan prioritas hanya dikunci setelah tugas final.
@@ -104,15 +112,78 @@ class Assignment extends Model
         });
 
         static::saving(function (self $assignment): void {
-            if ($assignment->status === StatusPenugasan::Dibatalkan
-                && trim((string) $assignment->alasan_pembatalan) === '') {
-                throw new \DomainException('Penugasan yang dibatalkan wajib menyertakan alasan pembatalan.');
+            $assignment->jagaTransisiStatus();
+
+            if ($assignment->status === StatusPenugasan::Dibatalkan) {
+                if (trim((string) $assignment->alasan_pembatalan) === '') {
+                    throw new DomainException('Penugasan yang dibatalkan wajib menyertakan alasan pembatalan.');
+                }
+
+                if (trim((string) $assignment->bukti_pembatalan) === '') {
+                    throw new DomainException('Penugasan yang dibatalkan wajib menyertakan bukti pembatalan.');
+                }
             }
 
-            if ($assignment->status === StatusPenugasan::Terverifikasi && $assignment->diverifikasi_pada === null) {
-                $assignment->diverifikasi_pada = ServerClock::now();
+            if ($assignment->status === StatusPenugasan::Terhambat
+                && trim((string) $assignment->kendala) === '') {
+                throw new DomainException('Status terhambat wajib menyertakan kendala.');
+            }
+
+            if ($assignment->status === StatusPenugasan::DiajukanSelesai && (int) $assignment->progres !== 100) {
+                throw new DomainException('Pengajuan selesai hanya sah bila progres sudah 100%.');
+            }
+
+            if ($assignment->status === StatusPenugasan::Terverifikasi) {
+                $assignment->diverifikasi_oleh ??= IdentitasPelapor::dariSesi()?->getKey();
+                $assignment->diverifikasi_pada ??= ServerClock::now();
+            }
+
+            if ($assignment->status === StatusPenugasan::Ditutup) {
+                if ((int) $assignment->progres !== 100) {
+                    throw new DomainException('Penugasan hanya dapat ditutup setelah progres 100%.');
+                }
+
+                if (trim((string) $assignment->alasan_penutupan) === ''
+                    || trim((string) $assignment->bukti_penutupan) === '') {
+                    throw new DomainException('Penutupan penugasan wajib menyertakan alasan dan bukti.');
+                }
+
+                $assignment->ditutup_pada ??= ServerClock::now();
             }
         });
+    }
+
+    /**
+     * Menolak lompatan status dan memastikan hanya pemegang izin verifikasi
+     * yang dapat mengunci hasil kerja.
+     */
+    private function jagaTransisiStatus(): void
+    {
+        if (! $this->status instanceof StatusPenugasan) {
+            return;
+        }
+
+        $lama = $this->exists
+            ? StatusPenugasan::tryFrom((string) $this->getRawOriginal('status'))
+            : null;
+
+        if ($lama !== null && $lama !== $this->status && ! $lama->bolehKe($this->status)) {
+            throw new DomainException(sprintf(
+                'Transisi status %s ke %s tidak sah.',
+                $lama->label(),
+                $this->status->label(),
+            ));
+        }
+
+        if (! in_array($this->status, [StatusPenugasan::Terverifikasi, StatusPenugasan::Ditutup], true)) {
+            return;
+        }
+
+        $pengguna = Auth::user();
+
+        if ($pengguna !== null && ! CakupanPengguna::bolehNamaIzin($pengguna, 'assignment.verify')) {
+            throw new DomainException('Hanya pemegang izin verifikasi yang dapat memverifikasi atau menutup penugasan.');
+        }
     }
 
     public static function nomorBerikutnya(): string

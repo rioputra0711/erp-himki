@@ -8,6 +8,7 @@ use App\Models\Assignment;
 use App\Models\Personel;
 use App\Models\User;
 use Database\Seeders\PeranIzinSeeder;
+use DomainException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -115,5 +116,51 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertFalse($pengurus->can('assignment.verify'));
         $this->assertTrue($pengurus->can('assignment.create'));
         $this->assertSame(56, Permission::query()->count());
+    }
+
+    // ---------------------------------- 3. State machine & kewajiban bukti
+
+    #[Test]
+    public function transisi_status_tidak_sah_ditolak_tanpa_mengubah_baris(): void
+    {
+        $tugas = Assignment::factory()->create(['status' => StatusPenugasan::Draft]);
+
+        try {
+            $tugas->denganAlasan('Coba lompat status')->update(['status' => StatusPenugasan::Terverifikasi]);
+            $this->fail('Transisi draft ke terverifikasi seharusnya ditolak.');
+        } catch (DomainException) {
+            // diharapkan
+        }
+
+        $this->assertSame(StatusPenugasan::Draft, $tugas->fresh()->status);
+    }
+
+    #[Test]
+    public function penutupan_wajib_alasan_dan_bukti_serta_mengisi_waktu_server(): void
+    {
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::Terverifikasi,
+            'progres' => 100,
+        ]);
+
+        try {
+            $tugas->denganAlasan('Menutup tugas')->update(['status' => StatusPenugasan::Ditutup]);
+            $this->fail('Penutupan tanpa alasan dan bukti seharusnya ditolak.');
+        } catch (DomainException) {
+            // diharapkan
+        }
+
+        $this->assertSame(StatusPenugasan::Terverifikasi, $tugas->fresh()->status);
+
+        $tugas->forceFill([
+            'alasan_penutupan' => 'Seluruh keluaran diterima',
+            'bukti_penutupan' => 'Berita acara 12/HIMKI/XI/2026',
+        ])->save();
+
+        $tugas->denganAlasan('Seluruh keluaran diterima')->update(['status' => StatusPenugasan::Ditutup]);
+
+        $segar = $tugas->fresh();
+        $this->assertSame(StatusPenugasan::Ditutup, $segar->status);
+        $this->assertNotNull($segar->ditutup_pada);
     }
 }
