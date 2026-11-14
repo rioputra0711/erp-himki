@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\KategoriTugas;
 use App\Enums\PeranSistem;
+use App\Enums\PrioritasTugas;
 use App\Enums\StatusPenugasan;
+use App\Enums\SumberPerintah;
 use App\Models\Assignment;
 use App\Models\Personel;
 use App\Models\User;
+use App\Support\ServerClock;
 use Database\Seeders\PeranIzinSeeder;
 use DomainException;
 use Illuminate\Database\QueryException;
@@ -162,5 +166,58 @@ class Tahap5PenugasanTest extends TestCase
         $segar = $tugas->fresh();
         $this->assertSame(StatusPenugasan::Ditutup, $segar->status);
         $this->assertNotNull($segar->ditutup_pada);
+    }
+
+    // ------------------- 4. Sumber perintah dari sesi & kode unik
+
+    #[Test]
+    public function sumber_perintah_dan_pemberi_tugas_diambil_dari_sesi_bukan_formulir(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelDe = Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create();
+        $this->actingAs($de);
+
+        $tugas = Assignment::buatDenganKodeUnik(function (Assignment $baru) use ($pic): void {
+            $baru->fill([
+                'judul' => 'Susun laporan',
+                'deskripsi' => 'Rincian pekerjaan',
+                'pic_id' => $pic->id,
+                'kategori' => KategoriTugas::Umum,
+                'target_keluaran' => 'Dokumen laporan',
+                'prioritas' => PrioritasTugas::Sedang,
+                'tanggal_mulai' => ServerClock::now()->toDateString(),
+                'tenggat' => ServerClock::now()->addDays(7),
+                'status' => StatusPenugasan::Aktif,
+                // upaya pemalsuan yang harus diabaikan model:
+                'sumber_perintah' => SumberPerintah::PengurusLangsung,
+                'pemberi_tugas_id' => $pic->id,
+            ]);
+        });
+
+        $this->assertSame(SumberPerintah::DeLangsung, $tugas->sumber_perintah);
+        $this->assertSame($personelDe->id, (int) $tugas->pemberi_tugas_id);
+        $this->assertMatchesRegularExpression('/^TGS-\d{4}-\d{4}$/', (string) $tugas->kode);
+    }
+
+    #[Test]
+    public function sumber_perintah_tidak_dapat_diubah_setelah_dibuat(): void
+    {
+        $tugas = Assignment::factory()->create(['sumber_perintah' => SumberPerintah::DeLangsung]);
+
+        $this->expectException(DomainException::class);
+
+        $tugas->update(['sumber_perintah' => SumberPerintah::PengurusMelaluiDe]);
+    }
+
+    #[Test]
+    public function dependensi_melingkar_ditolak(): void
+    {
+        $awal = Assignment::factory()->create();
+        $tengah = Assignment::factory()->create(['dependensi_id' => $awal->id]);
+
+        $this->assertTrue($awal->dependensiBerputar((int) $tengah->id));
+        $this->assertTrue($awal->dependensiBerputar((int) $awal->id));
+        $this->assertFalse($awal->dependensiBerputar(null));
     }
 }

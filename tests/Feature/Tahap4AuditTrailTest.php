@@ -121,6 +121,7 @@ class Tahap4AuditTrailTest extends TestCase
     {
         $admin = $this->akun(PeranSistem::Admin);
         $pelaku = $this->akun(PeranSistem::Pengurus);
+        Personel::factory()->create(['user_id' => $pelaku->id]);
 
         $this->actingAs($pelaku);
         $assignment = Assignment::factory()->create();
@@ -363,6 +364,7 @@ class Tahap4AuditTrailTest extends TestCase
         ]);
 
         $this->actingAs($de);
+        Personel::factory()->create(['user_id' => $de->id]);
         $assignment = Assignment::factory()->create();
 
         $operasional = AuditEvent::query()

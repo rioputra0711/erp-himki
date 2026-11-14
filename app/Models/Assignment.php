@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\KategoriTugas;
+use App\Enums\PeranSistem;
 use App\Enums\PrioritasTugas;
 use App\Enums\StatusPenugasan;
 use App\Enums\SumberPerintah;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 
 class Assignment extends Model
@@ -25,10 +27,10 @@ class Assignment extends Model
     use Auditable, HasFactory;
 
     protected $fillable = [
-        'kode',
         'judul',
         'deskripsi',
         'job_description_id',
+        'sumber_arahan_id',
         'sumber_perintah',
         'pemberi_tugas_id',
         'diteruskan_oleh_id',
@@ -42,10 +44,11 @@ class Assignment extends Model
         'progres',
         'kendala',
         'alasan_pembatalan',
+        'alasan_penutupan',
+        'bukti_penutupan',
+        'bukti_pembatalan',
+        'bukti_dokumen_id',
         'dependensi_id',
-        'diverifikasi_oleh',
-        'diverifikasi_pada',
-        'ditutup_pada',
     ];
 
     protected function casts(): array
@@ -109,9 +112,11 @@ class Assignment extends Model
     {
         static::creating(function (self $assignment): void {
             $assignment->kode ??= self::nomorBerikutnya();
+            $assignment->terapkanSumberPerintahSesi();
         });
 
         static::saving(function (self $assignment): void {
+            $assignment->jagaKolomTerlacak();
             $assignment->jagaTransisiStatus();
 
             if ($assignment->status === StatusPenugasan::Dibatalkan) {
@@ -186,6 +191,179 @@ class Assignment extends Model
         }
     }
 
+    /**
+     * Kolom jejak instruksi hanya ditulis sekali, oleh `creating`.
+     *
+     * Perubahan setelah baris ada akan memutus riwayat instruksi dari
+     * pelakunya, jadi ditolak untuk semua jalur penulisan.
+     */
+    private function jagaKolomTerlacak(): void
+    {
+        if (! $this->exists) {
+            return;
+        }
+
+        $terkunci = [
+            'kode' => 'ID penugasan',
+            'sumber_perintah' => 'Sumber perintah',
+            'pemberi_tugas_id' => 'Pemberi tugas',
+            'diteruskan_oleh_id' => 'Penerus arahan',
+            'sumber_arahan_id' => 'Arahan asal',
+        ];
+
+        foreach ($terkunci as $kolom => $label) {
+            if ($this->isDirty($kolom)) {
+                throw new DomainException($label.' tidak dapat diubah setelah penugasan dibuat.');
+            }
+        }
+    }
+
+    /**
+     * Menetapkan asal instruksi dari sesi, bukan dari formulir.
+     *
+     * Tiga jalur yang diakui (fitur.pdf Tahap 5):
+     * 1. DE memberi tugas langsung → `de_langsung`;
+     * 2. Pengurus memberi arahan, DE meneruskan → `pengurus_melalui_de`;
+     * 3. Pengurus memberi tugas langsung ke staf → `pengurus_langsung`.
+     */
+    private function terapkanSumberPerintahSesi(): void
+    {
+        $pengguna = Auth::user();
+
+        if ($pengguna === null) {
+            // Seeder dan tes tanpa sesi memakai kolom apa adanya.
+            return;
+        }
+
+        $personel = IdentitasPelapor::dariSesi($pengguna);
+
+        if ($personel === null) {
+            // Akun yang memang berwenang menerbitkan instruksi wajib tertaut
+            // Master Personel; selain itu baris dianggap data awal (seeder,
+            // fixture) dan kolomnya dibiarkan seperti diisi.
+            if (CakupanPengguna::bolehNamaIzin($pengguna, 'assignment.create')) {
+                throw new DomainException('Akun ini belum tertaut ke Master Personel, sehingga tidak dapat menerbitkan instruksi.');
+            }
+
+            return;
+        }
+
+        if (! CakupanPengguna::bolehNamaIzin($pengguna, 'assignment.create')) {
+            // Peran tanpa izin menerbitkan tugas tidak pernah sampai ke sini
+            // lewat HTTP (Policy menolak lebih dulu). Baris yang lahir dari
+            // seeder atau factory dibiarkan memakai kolomnya sendiri.
+            return;
+        }
+
+        if ($this->sumber_arahan_id !== null) {
+            $arahan = Feedback::find($this->sumber_arahan_id);
+
+            if ($arahan === null) {
+                throw new DomainException('Arahan asal tidak ditemukan.');
+            }
+
+            $this->tetapkanSumberPerintah(
+                SumberPerintah::PengurusMelaluiDe,
+                Personel::find($arahan->pemberi_id),
+                $personel,
+            );
+
+            return;
+        }
+
+        if ($pengguna->peranSistem() === PeranSistem::Pengurus) {
+            $this->tetapkanSumberPerintah(SumberPerintah::PengurusLangsung, $personel);
+
+            return;
+        }
+
+        if ($pengguna->peranSistem() === PeranSistem::DirekturEksekutif) {
+            $this->tetapkanSumberPerintah(SumberPerintah::DeLangsung, $personel);
+
+            return;
+        }
+
+        throw new DomainException('Peran ini tidak berwenang menerbitkan penugasan.');
+    }
+
+    public function tetapkanSumberPerintah(SumberPerintah $sumber, ?Personel $pemberi, ?Personel $penerus = null): static
+    {
+        $this->setAttribute('sumber_perintah', $sumber);
+        $this->setAttribute('pemberi_tugas_id', $pemberi?->getKey());
+        $this->setAttribute('diteruskan_oleh_id', $penerus?->getKey());
+
+        return $this;
+    }
+
+    /**
+     * Menyimpan tugas dengan kode urut, mengulang bila dua pembuat bertabrakan
+     * pada nomor yang sama.
+     *
+     * @param  callable(self): void  $isi
+     */
+    public static function buatDenganKodeUnik(callable $isi): self
+    {
+        $percobaan = 0;
+
+        while (true) {
+            $percobaan++;
+
+            $tugas = new self;
+            $isi($tugas);
+
+            try {
+                $tugas->save();
+
+                return $tugas;
+            } catch (UniqueConstraintViolationException $e) {
+                if ($percobaan >= 3) {
+                    throw $e;
+                }
+            }
+        }
+    }
+
+    /**
+     * Apakah menautkan tugas ini ke `$id` akan membentuk lingkaran dependensi.
+     */
+    public function dependensiBerputar(?int $id): bool
+    {
+        if ($id === null) {
+            return false;
+        }
+
+        $dikunjungi = [];
+        $sekarang = $id;
+
+        for ($langkah = 0; $langkah < 20 && $sekarang !== null; $langkah++) {
+            if ($sekarang === (int) $this->getKey()) {
+                return true;
+            }
+
+            if (isset($dikunjungi[$sekarang])) {
+                return true;
+            }
+
+            $dikunjungi[$sekarang] = true;
+            $sekarang = static::query()->whereKey($sekarang)->value('dependensi_id');
+            $sekarang = $sekarang === null ? null : (int) $sekarang;
+        }
+
+        return false;
+    }
+
+    /**
+     * Batas baris untuk akun Staf: hanya tugas yang menjadi tanggung jawabnya.
+     */
+    public function scopeTerlihatOleh(Builder $query, ?User $pengguna): Builder
+    {
+        if ($pengguna === null || ! CakupanPengguna::adalahStaf($pengguna)) {
+            return $query;
+        }
+
+        return $query->where('pic_id', CakupanPengguna::personelId($pengguna) ?? 0);
+    }
+
     public static function nomorBerikutnya(): string
     {
         $tahun = ServerClock::now()->year;
@@ -204,6 +382,16 @@ class Assignment extends Model
     public function jobDescription(): BelongsTo
     {
         return $this->belongsTo(JobDescription::class);
+    }
+
+    public function sumberArahan(): BelongsTo
+    {
+        return $this->belongsTo(Feedback::class, 'sumber_arahan_id');
+    }
+
+    public function buktiDokumen(): BelongsTo
+    {
+        return $this->belongsTo(Document::class, 'bukti_dokumen_id');
     }
 
     public function pemberiTugas(): BelongsTo
