@@ -15,14 +15,17 @@ use App\Models\Assignment;
 use App\Models\Feedback;
 use App\Models\Personel;
 use App\Models\User;
+use App\Support\PengirimNotifikasi;
 use App\Support\ServerClock;
 use Database\Seeders\PeranIzinSeeder;
 use DomainException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -380,5 +383,66 @@ class Tahap5PenugasanTest extends TestCase
         $item->denganAlasan('Pekerjaan selesai')->update(['status' => StatusActionItem::TerverifikasiSelesai]);
 
         $this->assertTrue($arahan->fresh()->bolehDitutup());
+    }
+
+    // ------------------------------------------------------- 7. Notifikasi
+
+    #[Test]
+    public function arahan_pengurus_ke_staf_mengirim_notifikasi_ke_staf_dan_de(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $staf = $this->akun(PeranSistem::Staf);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $personelStaf = Personel::factory()->create(['user_id' => $staf->id]);
+        $this->actingAs($pengurus);
+
+        $arahan = Feedback::query()->create([
+            'penerima_id' => $personelStaf->id,
+            'jenis' => JenisFeedback::Arahan,
+            'isi' => 'Perbaiki rekap',
+            'butuh_tindakan' => true,
+        ]);
+
+        app(PengirimNotifikasi::class)->arahanBaru($arahan);
+
+        $this->assertCount(1, $staf->fresh()->notifications);
+        $this->assertCount(1, $de->fresh()->notifications);
+        $this->assertSame('arahan', $staf->fresh()->notifications->first()->data['jenis']);
+    }
+
+    #[Test]
+    public function kegagalan_notifikasi_tidak_membatalkan_data_utama(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create();
+        $this->actingAs($de);
+
+        app()->instance(PengirimNotifikasi::class, new class extends PengirimNotifikasi
+        {
+            protected function kirim(User $penerima, Notification $notifikasi): void
+            {
+                throw new RuntimeException('kanal mati');
+            }
+        });
+
+        $tugas = Assignment::buatDenganKodeUnik(fn (Assignment $t) => $t->fill([
+            'judul' => 'Uji',
+            'deskripsi' => 'Uji',
+            'pic_id' => $pic->id,
+            'kategori' => KategoriTugas::Umum,
+            'target_keluaran' => 'X',
+            'prioritas' => PrioritasTugas::Sedang,
+            'tanggal_mulai' => ServerClock::now()->toDateString(),
+            'tenggat' => ServerClock::now()->addDay(),
+        ]));
+
+        app(PengirimNotifikasi::class)->penugasanBaru($tugas);
+
+        $this->assertDatabaseHas('assignments', ['id' => $tugas->id]);
+        $this->assertDatabaseHas('audit_events', ['event' => 'notifikasi.gagal']);
+        $this->assertDatabaseCount('notifications', 0);
     }
 }
