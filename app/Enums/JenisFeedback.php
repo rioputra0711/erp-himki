@@ -8,6 +8,7 @@ enum JenisFeedback: string
     case Komentar = 'komentar';
     case Masukan = 'masukan';
     case Koreksi = 'koreksi';
+    case Persetujuan = 'persetujuan';
 
     public function label(): string
     {

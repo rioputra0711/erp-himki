@@ -18,6 +18,20 @@ class FeedbackFactory extends Factory
     protected $model = Feedback::class;
 
     /**
+     * Jenis yang boleh muncul acak.
+     *
+     * `persetujuan` sengaja tidak termasuk: persetujuan formal hanya sah dari
+     * Pengurus (CHECK `feedback_persetujuan_pengurus`), sedangkan `asal` di
+     * sini acak. Tes yang membutuhkan persetujuan menetapkan kolomnya sendiri.
+     */
+    private const JENIS_ACAK = [
+        JenisFeedback::Arahan,
+        JenisFeedback::Komentar,
+        JenisFeedback::Masukan,
+        JenisFeedback::Koreksi,
+    ];
+
+    /**
      * @return array<string, mixed>
      */
     public function definition(): array
@@ -25,7 +39,7 @@ class FeedbackFactory extends Factory
         return [
             'pemberi_id' => Personel::factory(),
             'penerima_id' => Personel::factory(),
-            'jenis' => fake()->randomElement(JenisFeedback::cases()),
+            'jenis' => fake()->randomElement(self::JENIS_ACAK),
             'asal' => fake()->randomElement(AsalFeedback::cases()),
             'subjek_type' => (new Assignment)->getMorphClass(),
             'subjek_id' => Assignment::factory(),

@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AsalFeedback;
+use App\Enums\JenisFeedback;
 use App\Enums\KategoriTugas;
 use App\Enums\PeranSistem;
 use App\Enums\PrioritasTugas;
 use App\Enums\StatusPenugasan;
 use App\Enums\SumberPerintah;
 use App\Models\Assignment;
+use App\Models\Feedback;
 use App\Models\Personel;
 use App\Models\User;
 use App\Support\ServerClock;
@@ -219,5 +222,102 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertTrue($awal->dependensiBerputar((int) $tengah->id));
         $this->assertTrue($awal->dependensiBerputar((int) $awal->id));
         $this->assertFalse($awal->dependensiBerputar(null));
+    }
+
+    // --------------- 5. Identitas arahan & pemisahan persetujuan formal
+
+    #[Test]
+    public function identitas_pemberi_arahan_dikunci_dari_sesi(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $personel = Personel::factory()->create(['user_id' => $pengurus->id]);
+        $personel->load('jabatan');
+        $penerima = Personel::factory()->create();
+        $this->actingAs($pengurus);
+
+        $arahan = Feedback::query()->create([
+            'penerima_id' => $penerima->id,
+            'jenis' => JenisFeedback::Arahan,
+            'asal' => AsalFeedback::De,
+            'isi' => 'Tindak lanjuti hasil rapat',
+            'pemberi_id' => $penerima->id,
+        ]);
+
+        $this->assertSame((int) $personel->id, (int) $arahan->pemberi_id);
+        $this->assertSame(AsalFeedback::Pengurus, $arahan->asal);
+        $this->assertSame($personel->jabatan?->nama, $arahan->pemberi_jabatan);
+    }
+
+    #[Test]
+    public function komentar_tidak_dapat_dinaikkan_menjadi_persetujuan(): void
+    {
+        $arahan = Feedback::factory()->create([
+            'jenis' => JenisFeedback::Komentar,
+            'asal' => AsalFeedback::Pengurus,
+        ]);
+
+        $this->expectException(DomainException::class);
+
+        $arahan->update(['jenis' => JenisFeedback::Persetujuan]);
+    }
+
+    #[Test]
+    public function staf_hanya_melihat_arahan_yang_ia_beri_atau_terima(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personelStaf = Personel::factory()->create(['user_id' => $staf->id]);
+        $orangLain = Personel::factory()->create();
+
+        $sebagaiPenerima = Feedback::factory()->create(['penerima_id' => $personelStaf->id]);
+        $sebagaiPemberi = Feedback::factory()->create([
+            'pemberi_id' => $personelStaf->id,
+            'penerima_id' => $orangLain->id,
+        ]);
+        $milikOrangLain = Feedback::factory()->create([
+            'pemberi_id' => $orangLain->id,
+            'penerima_id' => $orangLain->id,
+        ]);
+
+        $terlihat = Feedback::query()->terlihatOleh($staf)->pluck('id')->all();
+
+        $this->assertEqualsCanonicalizing(
+            [$sebagaiPenerima->id, $sebagaiPemberi->id],
+            $terlihat,
+        );
+        $this->assertNotContains($milikOrangLain->id, $terlihat);
+    }
+
+    #[Test]
+    public function persetujuan_formal_hanya_dari_pengurus_dan_tidak_meminta_tindakan(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $this->actingAs($de);
+
+        try {
+            Feedback::query()->create([
+                'penerima_id' => Personel::factory()->create()->id,
+                'jenis' => JenisFeedback::Persetujuan,
+                'isi' => 'Setuju',
+            ]);
+            $this->fail('Persetujuan dari DE seharusnya ditolak.');
+        } catch (DomainException) {
+            // diharapkan: asal ditetapkan sesi menjadi `de`
+        }
+
+        $this->assertDatabaseCount('feedback', 0);
+
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        $this->actingAs($pengurus);
+
+        $this->expectException(DomainException::class);
+
+        Feedback::query()->create([
+            'penerima_id' => Personel::factory()->create()->id,
+            'jenis' => JenisFeedback::Persetujuan,
+            'isi' => 'Setuju',
+            'butuh_tindakan' => true,
+        ]);
     }
 }
