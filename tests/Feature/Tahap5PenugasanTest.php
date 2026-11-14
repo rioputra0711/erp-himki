@@ -884,4 +884,158 @@ class Tahap5PenugasanTest extends TestCase
             ->get(route('modul.show', 'assignment'))
             ->assertRedirect(route('tugas.index'));
     }
+
+    // -------------------------------------- 12. Alur HTTP arahan & tindak lanjut
+
+    #[Test]
+    public function de_melihat_arahan_pengurus_kepada_staf_tetapi_staf_lain_tidak(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $stafA = $this->akun(PeranSistem::Staf);
+        $stafB = $this->akun(PeranSistem::Staf);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $personelA = Personel::factory()->create(['user_id' => $stafA->id]);
+        Personel::factory()->create(['user_id' => $stafB->id]);
+
+        $this->actingAs($pengurus);
+        $arahan = Feedback::query()->create([
+            'penerima_id' => $personelA->id,
+            'jenis' => JenisFeedback::Arahan,
+            'isi' => 'Koordinasi',
+            'butuh_tindakan' => true,
+        ]);
+
+        $this->actingAs($de)->get(route('arahan.show', $arahan))->assertOk();
+        $this->actingAs($stafA)->get(route('arahan.show', $arahan))->assertOk();
+        $this->actingAs($stafB)->get(route('arahan.show', $arahan))->assertForbidden();
+    }
+
+    #[Test]
+    public function persetujuan_formal_hanya_dibuat_pengurus_dan_tidak_mengubah_status_objek(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $arahan = Feedback::factory()->create(['asal' => AsalFeedback::Pengurus, 'jenis' => JenisFeedback::Arahan]);
+
+        $this->actingAs($de)->post(route('arahan.setujui', $arahan), ['isi' => 'Setuju'])->assertForbidden();
+        $this->actingAs($pengurus)->post(route('arahan.setujui', $arahan), ['isi' => 'Setuju'])->assertRedirect();
+
+        $this->assertDatabaseHas('feedback', ['jenis' => 'persetujuan', 'asal' => 'pengurus', 'butuh_tindakan' => false]);
+        $this->assertSame(StatusFeedback::Terbuka, $arahan->fresh()->status);
+    }
+
+    #[Test]
+    public function pengurus_mengirim_arahan_lewat_http_dan_penerima_dinotifikasi(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        $staf = $this->akun(PeranSistem::Staf);
+        $penerima = Personel::factory()->create(['user_id' => $staf->id, 'status_aktif' => true]);
+
+        $this->actingAs($pengurus)->post(route('arahan.store'), [
+            'penerima_id' => $penerima->id,
+            'jenis' => 'arahan',
+            'isi' => 'Mohon siapkan bahan rapat koordinasi pekan depan.',
+            'butuh_tindakan' => 1,
+            'tenggat' => ServerClock::now()->addDays(3)->toDateString(),
+            // Upaya memalsukan identitas; harus ditimpa dari sesi.
+            'asal' => 'de',
+        ])->assertRedirect();
+
+        $arahan = Feedback::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(AsalFeedback::Pengurus, $arahan->asal);
+        $this->assertSame((int) $pengurus->personel->id, (int) $arahan->pemberi_id);
+        // Penerima + seluruh DE (arahan langsung selalu terlihat DE).
+        $this->assertGreaterThanOrEqual(1, $staf->notifications()->count());
+    }
+
+    #[Test]
+    public function staf_tidak_dapat_membuat_arahan(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        Personel::factory()->create(['user_id' => $staf->id]);
+
+        $this->actingAs($staf)
+            ->post(route('arahan.store'), [
+                'penerima_id' => Personel::factory()->create()->id,
+                'jenis' => 'arahan',
+                'isi' => 'Coba-coba',
+            ])
+            ->assertForbidden();
+    }
+
+    #[Test]
+    public function de_menambah_tindak_lanjut_dari_arahan_dan_pic_dinotifikasi(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $staf = $this->akun(PeranSistem::Staf);
+        $pic = Personel::factory()->create(['user_id' => $staf->id, 'status_aktif' => true]);
+
+        $arahan = Feedback::factory()->create([
+            'asal' => AsalFeedback::De,
+            'jenis' => JenisFeedback::Arahan,
+            'butuh_tindakan' => true,
+            'penerima_id' => $pic->id,
+        ]);
+
+        $this->actingAs($de)->post(route('arahan.tindak-lanjut', $arahan), [
+            'deskripsi' => 'Susun daftar hadir peserta.',
+            'pic_id' => $pic->id,
+            'tenggat' => ServerClock::now()->addDays(2)->toDateString(),
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('action_items', [
+            'feedback_id' => $arahan->id,
+            'pic_id' => $pic->id,
+            'status' => 'terbuka',
+        ]);
+        $this->assertGreaterThanOrEqual(1, $staf->notifications()->count());
+    }
+
+    #[Test]
+    public function action_item_hanya_diverifikasi_dan_ditutup_de_dengan_bukti(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        $item = ActionItem::factory()->create(['pic_id' => $personel->id]);
+
+        $this->actingAs($staf)
+            ->patch(route('tindak-lanjut.update', $item), [
+                'status' => 'dalam_proses',
+                'alasan' => 'Sedang dikerjakan bersama tim.',
+            ])->assertRedirect();
+
+        $this->assertSame(StatusActionItem::DalamProses, $item->fresh()->status);
+
+        $this->actingAs($staf)
+            ->patch(route('tindak-lanjut.verifikasi', $item), ['alasan' => 'Selesai semua'])
+            ->assertForbidden();
+
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $this->actingAs($de)
+            ->patch(route('tindak-lanjut.tutup', $item), [
+                'alasan' => 'Bukti lengkap dan sesuai.',
+                'bukti_penutupan' => '',
+            ])
+            ->assertSessionHasErrors('bukti_penutupan');
+
+        $this->actingAs($de)
+            ->patch(route('tindak-lanjut.tutup', $item), [
+                'alasan' => 'Bukti lengkap dan sesuai.',
+                'bukti_penutupan' => 'BA-07/XI/2026',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(StatusActionItem::Ditutup, $item->fresh()->status);
+        $this->assertNotNull($item->fresh()->selesai_pada);
+    }
 }

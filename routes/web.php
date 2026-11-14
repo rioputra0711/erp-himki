@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ArahanController;
 use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BerandaController;
@@ -10,6 +11,7 @@ use App\Http\Controllers\MasterJabatanController;
 use App\Http\Controllers\MasterJobDescriptionController;
 use App\Http\Controllers\MasterPersonelController;
 use App\Http\Controllers\ModulController;
+use App\Http\Controllers\TindakLanjutController;
 use App\Http\Controllers\UnduhDokumenController;
 use Illuminate\Support\Facades\Route;
 
@@ -108,6 +110,44 @@ Route::middleware(['auth', 'aktif'])->group(function (): void {
         Route::middleware('izin:assignment.view')->group(function (): void {
             Route::get('/', [AssignmentController::class, 'index'])->name('index');
             Route::get('{tugas}', [AssignmentController::class, 'show'])->whereNumber('tugas')->name('show');
+        });
+    });
+
+    /*
+    |----------------------------------------------------------------------
+    | Arahan & Tindak Lanjut (Tahap 5)
+    |----------------------------------------------------------------------
+    |
+    | Arahan berasal dari feedback berjenis arahan/koreksi/masukan. Persetujuan
+    | formal adalah baris baru, bukan perubahan status arahan. Rute statis
+    | `/arahan/buat` didaftarkan sebelum `/arahan/{arahan}`.
+    |
+    */
+    Route::prefix('arahan')->name('arahan.')->group(function (): void {
+        Route::middleware('izin:feedback.create')->group(function (): void {
+            Route::get('buat', [ArahanController::class, 'create'])->name('create');
+            Route::post('/', [ArahanController::class, 'store'])->name('store');
+            Route::post('{arahan}/setujui', [ArahanController::class, 'setujui'])->whereNumber('arahan')->name('setujui');
+        });
+
+        Route::middleware('izin:action_item.create')->group(function (): void {
+            Route::post('{arahan}/tindak-lanjut', [ArahanController::class, 'tindakLanjut'])->whereNumber('arahan')->name('tindak-lanjut');
+        });
+
+        Route::middleware('izin:feedback.view')->group(function (): void {
+            Route::get('/', [ArahanController::class, 'index'])->name('index');
+            Route::get('{arahan}', [ArahanController::class, 'show'])->whereNumber('arahan')->name('show');
+        });
+    });
+
+    Route::prefix('tindak-lanjut')->name('tindak-lanjut.')->group(function (): void {
+        Route::middleware('izin:action_item.update')->group(function (): void {
+            Route::patch('{tindakLanjut}', [TindakLanjutController::class, 'update'])->whereNumber('tindakLanjut')->name('update');
+        });
+
+        Route::middleware('izin:action_item.verify')->group(function (): void {
+            Route::patch('{tindakLanjut}/verifikasi', [TindakLanjutController::class, 'verifikasi'])->whereNumber('tindakLanjut')->name('verifikasi');
+            Route::patch('{tindakLanjut}/tutup', [TindakLanjutController::class, 'tutup'])->whereNumber('tindakLanjut')->name('tutup');
         });
     });
 
