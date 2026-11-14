@@ -45,6 +45,28 @@ final class CheckGuard
     }
 
     /**
+     * Melepas satu aturan. Dipakai `down()` migrasi agar rollback tidak
+     * meninggalkan CHECK yang menunjuk kolom yang sudah dihapus.
+     */
+    public static function drop(string $table, string $name): void
+    {
+        if (self::memakaiTrigger()) {
+            self::lepas($table, $name);
+
+            if (Schema::hasTable(self::TABEL_ATURAN)) {
+                DB::table(self::TABEL_ATURAN)
+                    ->where('table_name', $table)
+                    ->where('name', $name)
+                    ->delete();
+            }
+
+            return;
+        }
+
+        DB::statement(sprintf('ALTER TABLE %s DROP CONSTRAINT %s', $table, $name));
+    }
+
+    /**
      * Memasang ulang seluruh aturan yang tercatat. Dipanggil migrasi terakhir
      * agar trigger yang hilang akibat pembangunan ulang tabel kembali aktif.
      */
