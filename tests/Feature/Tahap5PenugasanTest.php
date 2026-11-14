@@ -8,6 +8,7 @@ use App\Enums\KategoriTugas;
 use App\Enums\PeranSistem;
 use App\Enums\PrioritasTugas;
 use App\Enums\StatusActionItem;
+use App\Enums\StatusFeedback;
 use App\Enums\StatusPenugasan;
 use App\Enums\SumberPerintah;
 use App\Models\ActionItem;
@@ -600,5 +601,240 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertTrue($de->can('verifikasi', $item));
         $this->assertFalse($staf->can('tutup', $item));
         $this->assertFalse($staf->can('verifikasi', $item));
+    }
+
+    // ------------------------------------------- 10. Alur HTTP penugasan
+
+    #[Test]
+    public function de_membuat_tugas_lewat_formulir_dengan_sumber_perintah_otomatis(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelDe = Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create(['status_aktif' => true]);
+
+        $this->actingAs($de)->post(route('tugas.store'), [
+            'judul' => 'Rekap Q4',
+            'deskripsi' => 'Menyusun rekap kegiatan kuartal keempat.',
+            'pic_id' => $pic->id,
+            'kategori' => 'umum',
+            'target_keluaran' => 'Berkas rekap',
+            'prioritas' => 'sedang',
+            'tanggal_mulai' => ServerClock::now()->toDateString(),
+            'tenggat' => ServerClock::now()->addDays(5)->toDateTimeString(),
+            // Upaya mengubah jejak instruksi dari formulir; harus diabaikan.
+            'sumber_perintah' => 'pengurus_langsung',
+            'pemberi_tugas_id' => $pic->id,
+        ])->assertRedirect();
+
+        $tugas = Assignment::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(SumberPerintah::DeLangsung, $tugas->sumber_perintah);
+        $this->assertSame((int) $personelDe->id, (int) $tugas->pemberi_tugas_id);
+        $this->assertSame(StatusPenugasan::Aktif, $tugas->status);
+        $this->assertSame(0, (int) $tugas->progres);
+        $this->assertStringStartsWith('TGS-'.ServerClock::now()->year.'-', (string) $tugas->kode);
+        $this->assertDatabaseCount('notifications', 1);
+    }
+
+    #[Test]
+    public function staf_dan_admin_ditolak_saat_membuat_tugas(): void
+    {
+        foreach ([PeranSistem::Staf, PeranSistem::Admin] as $peran) {
+            $this->actingAs($this->akun($peran))
+                ->post(route('tugas.store'), [])
+                ->assertForbidden();
+        }
+    }
+
+    #[Test]
+    public function de_meneruskan_arahan_pengurus_menjadi_tugas(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelDe = Personel::factory()->create(['user_id' => $de->id]);
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        $personelPengurus = Personel::factory()->create(['user_id' => $pengurus->id]);
+        $pic = Personel::factory()->create(['status_aktif' => true]);
+
+        $arahan = Feedback::factory()->create([
+            'pemberi_id' => $personelPengurus->id,
+            'penerima_id' => $personelDe->id,
+            'asal' => AsalFeedback::Pengurus,
+            'jenis' => JenisFeedback::Arahan,
+            'status' => StatusFeedback::Terbuka,
+            'butuh_tindakan' => true,
+        ]);
+
+        $this->actingAs($de)->post(route('tugas.store'), [
+            'judul' => 'Tindak lanjut arahan',
+            'deskripsi' => 'Melaksanakan arahan Pengurus.',
+            'pic_id' => $pic->id,
+            'kategori' => 'utama',
+            'target_keluaran' => 'Laporan pelaksanaan',
+            'prioritas' => 'tinggi',
+            'tanggal_mulai' => ServerClock::now()->toDateString(),
+            'tenggat' => ServerClock::now()->addDays(7)->toDateTimeString(),
+            'sumber_arahan_id' => $arahan->id,
+        ])->assertRedirect();
+
+        $tugas = Assignment::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(SumberPerintah::PengurusMelaluiDe, $tugas->sumber_perintah);
+        $this->assertSame((int) $personelPengurus->id, (int) $tugas->pemberi_tugas_id);
+        $this->assertSame((int) $personelDe->id, (int) $tugas->diteruskan_oleh_id);
+        $this->assertSame(StatusFeedback::Ditindaklanjuti, $arahan->fresh()->status);
+        // PIC menerima notifikasi penugasan, Pengurus menerima kabar arahan
+        // diteruskan.
+        $this->assertDatabaseCount('notifications', 2);
+    }
+
+    #[Test]
+    public function de_tidak_dapat_meneruskan_arahan_milik_orang_lain(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create(['status_aktif' => true]);
+
+        $arahan = Feedback::factory()->create([
+            'penerima_id' => Personel::factory()->create()->id,
+            'asal' => AsalFeedback::Pengurus,
+        ]);
+
+        // Factory arahan ikut membuat satu tugas sebagai subjeknya; yang
+        // diuji adalah tidak ada tugas *baru* dari permintaan ini.
+        $sebelum = Assignment::query()->count();
+
+        $this->actingAs($de)->post(route('tugas.store'), [
+            'judul' => 'Tindak lanjut',
+            'deskripsi' => 'Melaksanakan arahan.',
+            'pic_id' => $pic->id,
+            'kategori' => 'umum',
+            'target_keluaran' => 'Laporan',
+            'prioritas' => 'sedang',
+            'tanggal_mulai' => ServerClock::now()->toDateString(),
+            'tenggat' => ServerClock::now()->addDays(3)->toDateTimeString(),
+            'sumber_arahan_id' => $arahan->id,
+        ])->assertSessionHasErrors('sumber_arahan_id');
+
+        $this->assertSame($sebelum, Assignment::query()->count());
+    }
+
+    #[Test]
+    public function pengurus_membuat_tugas_langsung_mengirim_notifikasi_ke_de(): void
+    {
+        $pengurus = $this->akun(PeranSistem::Pengurus);
+        Personel::factory()->create(['user_id' => $pengurus->id]);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+        $pic = Personel::factory()->create(['status_aktif' => true]);
+
+        $this->actingAs($pengurus)->post(route('tugas.store'), [
+            'judul' => 'Instruksi langsung',
+            'deskripsi' => 'Arahan langsung Pengurus ke staf.',
+            'pic_id' => $pic->id,
+            'kategori' => 'lintas_bidang',
+            'target_keluaran' => 'Catatan pelaksanaan',
+            'prioritas' => 'mendesak',
+            'tanggal_mulai' => ServerClock::now()->toDateString(),
+            'tenggat' => ServerClock::now()->addDays(2)->toDateTimeString(),
+        ])->assertRedirect();
+
+        $tugas = Assignment::query()->latest('id')->firstOrFail();
+
+        $this->assertSame(SumberPerintah::PengurusLangsung, $tugas->sumber_perintah);
+        // PIC dan DE: arahan langsung Pengurus tidak boleh tersembunyi dari DE.
+        $this->assertDatabaseCount('notifications', 2);
+    }
+
+    #[Test]
+    public function verifikasi_tugas_hanya_untuk_de_dan_wajib_alasan(): void
+    {
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::DiajukanSelesai,
+            'progres' => 100,
+        ]);
+
+        foreach ([PeranSistem::Staf, PeranSistem::Pengurus] as $peran) {
+            $user = $this->akun($peran);
+            Personel::factory()->create(['user_id' => $user->id]);
+
+            $this->actingAs($user)
+                ->patch(route('tugas.verifikasi', $tugas), ['alasan' => 'Sudah diperiksa'])
+                ->assertForbidden();
+        }
+
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $this->actingAs($de)
+            ->patch(route('tugas.verifikasi', $tugas), ['alasan' => 'pendek'])
+            ->assertSessionHasErrors('alasan');
+
+        $this->actingAs($de)
+            ->patch(route('tugas.verifikasi', $tugas), ['alasan' => 'Bukti kerja lengkap dan sesuai target.'])
+            ->assertRedirect();
+
+        $segar = $tugas->fresh();
+
+        $this->assertSame(StatusPenugasan::Terverifikasi, $segar->status);
+        $this->assertNotNull($segar->diverifikasi_pada);
+    }
+
+    #[Test]
+    public function penutupan_lewat_http_wajib_alasan_dan_bukti(): void
+    {
+        $tugas = Assignment::factory()->create([
+            'status' => StatusPenugasan::Terverifikasi,
+            'progres' => 100,
+        ]);
+
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $this->actingAs($de)
+            ->patch(route('tugas.tutup', $tugas), [
+                'alasan_penutupan' => 'Seluruh keluaran sudah diterima.',
+                'bukti_penutupan' => '',
+            ])
+            ->assertSessionHasErrors('bukti_penutupan');
+
+        $this->actingAs($de)
+            ->patch(route('tugas.tutup', $tugas), [
+                'alasan_penutupan' => 'Seluruh keluaran sudah diterima.',
+                'bukti_penutupan' => 'Berita acara 12/XI/2026',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(StatusPenugasan::Ditutup, $tugas->fresh()->status);
+    }
+
+    #[Test]
+    public function pic_melaporkan_progres_dan_status_berpindah_ke_dalam_proses(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        $tugas = Assignment::factory()->create([
+            'pic_id' => $personel->id,
+            'status' => StatusPenugasan::Aktif,
+            'progres' => 0,
+        ]);
+
+        $this->actingAs($staf)
+            ->patch(route('tugas.progres', $tugas), ['progres' => 40])
+            ->assertRedirect();
+
+        $segar = $tugas->fresh();
+
+        $this->assertSame(40, (int) $segar->progres);
+        $this->assertSame(StatusPenugasan::DalamProses, $segar->status);
+    }
+
+    #[Test]
+    public function staf_tidak_dapat_membuka_tugas_personel_lain(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        Personel::factory()->create(['user_id' => $staf->id]);
+        $tugasLain = Assignment::factory()->create(['pic_id' => Personel::factory()->create()->id]);
+
+        $this->actingAs($staf)->get(route('tugas.show', $tugasLain))->assertForbidden();
     }
 }

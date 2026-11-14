@@ -35,6 +35,8 @@ class FilterPenugasanRequest extends FormRequest
             'kategori' => ['nullable', 'string', Rule::enum(KategoriTugas::class)],
             'prioritas' => ['nullable', 'string', Rule::enum(PrioritasTugas::class)],
             'sumber' => ['nullable', 'string', Rule::enum(SumberPerintah::class)],
+            'pic' => ['nullable', 'integer', Rule::exists('personel', 'id')],
+            'terlambat' => ['nullable', 'boolean'],
             'urut' => ['nullable', 'string', Rule::in(['tenggat', 'dibuat', 'prioritas'])],
             'arah' => ['nullable', 'string', Rule::in(['asc', 'desc'])],
         ];
@@ -51,6 +53,8 @@ class FilterPenugasanRequest extends FormRequest
             'kategori' => 'kategori',
             'prioritas' => 'prioritas',
             'sumber' => 'sumber perintah',
+            'pic' => 'penanggung jawab',
+            'terlambat' => 'penanda terlambat',
             'urut' => 'urutan',
             'arah' => 'arah urutan',
         ];

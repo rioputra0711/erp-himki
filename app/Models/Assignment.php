@@ -439,6 +439,11 @@ class Assignment extends Model
         return $this->hasMany(Document::class);
     }
 
+    public function actionItems(): HasMany
+    {
+        return $this->hasMany(ActionItem::class);
+    }
+
     public function scopeTerlambat(Builder $query): Builder
     {
         return $query

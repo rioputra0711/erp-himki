@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AssignmentController;
 use App\Http\Controllers\AuditController;
 use App\Http\Controllers\BerandaController;
 use App\Http\Controllers\DashboardController;
@@ -72,6 +73,42 @@ Route::middleware(['auth', 'aktif'])->group(function (): void {
         Route::get('/audit/{auditEvent}', [AuditController::class, 'show'])
             ->whereNumber('auditEvent')
             ->name('audit.show');
+    });
+
+    /*
+    |----------------------------------------------------------------------
+    | Penugasan & Tiga Jalur Arahan (Tahap 5)
+    |----------------------------------------------------------------------
+    |
+    | Rute statis `/tugas/buat` didaftarkan sebelum `/tugas/{tugas}` agar tidak
+    | tertangkap sebagai id. Setiap aksi punya middleware izin sendiri; Policy
+    | di controller menambah cakupan baris di atasnya.
+    |
+    */
+    Route::prefix('tugas')->name('tugas.')->group(function (): void {
+        Route::middleware('izin:assignment.create')->group(function (): void {
+            Route::get('buat', [AssignmentController::class, 'create'])->name('create');
+            Route::post('/', [AssignmentController::class, 'store'])->name('store');
+        });
+
+        Route::middleware('izin:assignment.update')->group(function (): void {
+            Route::get('{tugas}/ubah', [AssignmentController::class, 'edit'])->whereNumber('tugas')->name('edit');
+            Route::put('{tugas}', [AssignmentController::class, 'update'])->whereNumber('tugas')->name('update');
+            Route::patch('{tugas}/progres', [AssignmentController::class, 'progres'])->whereNumber('tugas')->name('progres');
+            Route::patch('{tugas}/ajukan-selesai', [AssignmentController::class, 'ajukan'])->whereNumber('tugas')->name('ajukan');
+            Route::patch('{tugas}/batalkan', [AssignmentController::class, 'batalkan'])->whereNumber('tugas')->name('batalkan');
+        });
+
+        Route::middleware('izin:assignment.verify')->group(function (): void {
+            Route::patch('{tugas}/verifikasi', [AssignmentController::class, 'verifikasi'])->whereNumber('tugas')->name('verifikasi');
+            Route::patch('{tugas}/tutup', [AssignmentController::class, 'tutup'])->whereNumber('tugas')->name('tutup');
+            Route::patch('{tugas}/aktifkan', [AssignmentController::class, 'aktifkan'])->whereNumber('tugas')->name('aktifkan');
+        });
+
+        Route::middleware('izin:assignment.view')->group(function (): void {
+            Route::get('/', [AssignmentController::class, 'index'])->name('index');
+            Route::get('{tugas}', [AssignmentController::class, 'show'])->whereNumber('tugas')->name('show');
+        });
     });
 
     /*
