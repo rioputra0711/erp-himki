@@ -837,4 +837,51 @@ class Tahap5PenugasanTest extends TestCase
 
         $this->actingAs($staf)->get(route('tugas.show', $tugasLain))->assertForbidden();
     }
+
+    // ------------------------------------------------ 11. Layar penugasan
+
+    #[Test]
+    public function layar_daftar_formulir_dan_detail_penugasan_dapat_dibuka(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personel = Personel::factory()->create(['user_id' => $de->id]);
+        $tugas = Assignment::factory()->create([
+            'pemberi_tugas_id' => $personel->id,
+            'pic_id' => Personel::factory()->create(['status_aktif' => true])->id,
+        ]);
+
+        $this->actingAs($de)->get(route('tugas.index'))->assertOk()->assertSee('Daftar Penugasan');
+        $this->actingAs($de)->get(route('tugas.create'))->assertOk()->assertSee('Sumber perintah');
+        $this->actingAs($de)->get(route('tugas.show', $tugas))->assertOk()->assertSee($tugas->judul);
+        $this->actingAs($de)->get(route('tugas.edit', $tugas))->assertOk();
+    }
+
+    #[Test]
+    public function staf_hanya_melihat_tugas_miliknya_pada_daftar(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        $miliknya = Assignment::factory()->create(['pic_id' => $personel->id]);
+        $milikLain = Assignment::factory()->create(['pic_id' => Personel::factory()->create()->id]);
+
+        $this->actingAs($staf)
+            ->get(route('tugas.index'))
+            ->assertOk()
+            ->assertSee($miliknya->judul)
+            ->assertDontSee($milikLain->judul);
+
+        // Tanpa izin buat, tombol Tugas Baru tidak dirender.
+        $this->actingAs($staf)->get(route('tugas.index'))->assertDontSee('Tugas Baru');
+    }
+
+    #[Test]
+    public function menu_modul_penugasan_dialihkan_ke_layar_tugas(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $this->actingAs($de)
+            ->get(route('modul.show', 'assignment'))
+            ->assertRedirect(route('tugas.index'));
+    }
 }

@@ -23,6 +23,13 @@
                     </a>
                 @endforeach
 
+                @can('assignment.view')
+                    <a href="{{ route('tugas.index') }}"
+                       class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                        Penugasan
+                    </a>
+                @endcan
+
                 @can('personel.view')
                     <a href="{{ route('master.personel.index') }}"
                        class="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">

@@ -454,4 +454,17 @@ class Assignment extends Model
             ])
             ->where('tenggat', '<', ServerClock::now());
     }
+
+    /**
+     * Apakah tugas ini sudah melewati tenggat dan belum final.
+     *
+     * Dipakai layar daftar untuk penanda "Terlambat"; definisinya sengaja sama
+     * dengan `scopeTerlambat` supaya penanda dan filter tidak pernah berbeda.
+     */
+    public function terlambat(): bool
+    {
+        return ! $this->status?->isFinal()
+            && $this->tenggat !== null
+            && $this->tenggat->lt(ServerClock::now());
+    }
 }
