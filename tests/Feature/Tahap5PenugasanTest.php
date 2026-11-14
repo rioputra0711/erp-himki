@@ -16,6 +16,7 @@ use App\Models\Feedback;
 use App\Models\Personel;
 use App\Models\User;
 use App\Support\PengirimNotifikasi;
+use App\Support\RingkasanTunggakan;
 use App\Support\ServerClock;
 use Database\Seeders\PeranIzinSeeder;
 use DomainException;
@@ -444,5 +445,66 @@ class Tahap5PenugasanTest extends TestCase
         $this->assertDatabaseHas('assignments', ['id' => $tugas->id]);
         $this->assertDatabaseHas('audit_events', ['event' => 'notifikasi.gagal']);
         $this->assertDatabaseCount('notifications', 0);
+    }
+
+    // ---------------------------------------------- 8. Ringkasan tunggakan
+
+    #[Test]
+    public function tunggakan_staf_hanya_miliknya_sendiri(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $personel = Personel::factory()->create(['user_id' => $staf->id]);
+        $lain = Personel::factory()->create();
+
+        Assignment::factory()->create(['pic_id' => $personel->id, 'status' => StatusPenugasan::Aktif]);
+        Assignment::factory()->create(['pic_id' => $lain->id, 'status' => StatusPenugasan::Aktif]);
+
+        $ringkas = RingkasanTunggakan::untuk($staf);
+
+        $this->assertCount(1, $ringkas['tugas']);
+        $this->assertSame((int) $personel->id, (int) $ringkas['tugas']->first()->pic_id);
+    }
+
+    #[Test]
+    public function admin_tidak_memiliki_tunggakan_operasional(): void
+    {
+        $admin = $this->akun(PeranSistem::Admin);
+        Assignment::factory()->create(['status' => StatusPenugasan::Aktif]);
+
+        $ringkas = RingkasanTunggakan::untuk($admin);
+
+        $this->assertCount(0, $ringkas['tugas']);
+        $this->assertCount(0, $ringkas['tindakLanjut']);
+        $this->assertCount(0, $ringkas['arahan']);
+        $this->assertSame(0, $ringkas['jumlah']);
+    }
+
+    #[Test]
+    public function tugas_final_dan_item_selesai_tidak_dihitung_sebagai_tunggakan(): void
+    {
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $aktif = Assignment::factory()->create(['status' => StatusPenugasan::Aktif]);
+        Assignment::factory()->create([
+            'status' => StatusPenugasan::Terverifikasi,
+            'progres' => 100,
+        ]);
+
+        ActionItem::factory()->create([
+            'assignment_id' => $aktif->id,
+            'status' => StatusActionItem::DalamProses,
+        ]);
+        ActionItem::factory()->create([
+            'assignment_id' => $aktif->id,
+            'status' => StatusActionItem::TerverifikasiSelesai,
+            'diverifikasi_oleh' => Personel::factory(),
+        ]);
+
+        $ringkas = RingkasanTunggakan::untuk($de);
+
+        $this->assertSame(1, $ringkas['tugas']->count());
+        $this->assertSame(1, $ringkas['tindakLanjut']->count());
+        $this->assertSame(2, $ringkas['jumlah']);
     }
 }
