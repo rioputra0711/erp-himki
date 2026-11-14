@@ -7,8 +7,10 @@ use App\Enums\JenisFeedback;
 use App\Enums\KategoriTugas;
 use App\Enums\PeranSistem;
 use App\Enums\PrioritasTugas;
+use App\Enums\StatusActionItem;
 use App\Enums\StatusPenugasan;
 use App\Enums\SumberPerintah;
+use App\Models\ActionItem;
 use App\Models\Assignment;
 use App\Models\Feedback;
 use App\Models\Personel;
@@ -319,5 +321,64 @@ class Tahap5PenugasanTest extends TestCase
             'isi' => 'Setuju',
             'butuh_tindakan' => true,
         ]);
+    }
+
+    // ---------------------------------------- 6. Penjaga action item
+
+    #[Test]
+    public function action_item_ditutup_wajib_bukti_dan_hanya_de(): void
+    {
+        $staf = $this->akun(PeranSistem::Staf);
+        $de = $this->akun(PeranSistem::DirekturEksekutif);
+        $personelStaf = Personel::factory()->create(['user_id' => $staf->id]);
+        Personel::factory()->create(['user_id' => $de->id]);
+
+        $item = ActionItem::factory()->create([
+            'pic_id' => $personelStaf->id,
+            'status' => StatusActionItem::DiajukanSelesai,
+        ]);
+
+        $this->actingAs($staf);
+
+        try {
+            $item->denganAlasan('Menutup item')->update(['status' => StatusActionItem::Ditutup]);
+            $this->fail('Penutupan tanpa bukti seharusnya ditolak.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('bukti', $e->getMessage());
+        }
+
+        $item->refresh()->forceFill(['bukti_penutupan' => 'Dokumentasi kegiatan 07/XI/2026'])->save();
+
+        try {
+            $item->denganAlasan('Menutup item')->update(['status' => StatusActionItem::Ditutup]);
+            $this->fail('Staf tidak boleh menutup action item.');
+        } catch (DomainException $e) {
+            $this->assertStringContainsString('verifikasi', $e->getMessage());
+        }
+
+        $this->assertSame(StatusActionItem::DiajukanSelesai, $item->fresh()->status);
+
+        $this->actingAs($de);
+        $item->fresh()->denganAlasan('Bukti diterima')->update(['status' => StatusActionItem::Ditutup]);
+
+        $this->assertSame(StatusActionItem::Ditutup, $item->fresh()->status);
+    }
+
+    #[Test]
+    public function arahan_baru_boleh_ditutup_setelah_seluruh_item_tuntas(): void
+    {
+        $arahan = Feedback::factory()->create();
+        $this->assertTrue($arahan->bolehDitutup(), 'Arahan tanpa action item boleh ditutup.');
+
+        $item = ActionItem::factory()->create([
+            'feedback_id' => $arahan->id,
+            'status' => StatusActionItem::DalamProses,
+        ]);
+
+        $this->assertFalse($arahan->fresh()->bolehDitutup());
+
+        $item->denganAlasan('Pekerjaan selesai')->update(['status' => StatusActionItem::TerverifikasiSelesai]);
+
+        $this->assertTrue($arahan->fresh()->bolehDitutup());
     }
 }

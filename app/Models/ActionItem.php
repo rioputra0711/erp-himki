@@ -4,12 +4,15 @@ namespace App\Models;
 
 use App\Enums\StatusActionItem;
 use App\Models\Concerns\Auditable;
+use App\Support\CakupanPengguna;
 use App\Support\ServerClock;
 use Database\Factories\ActionItemFactory;
+use DomainException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 class ActionItem extends Model
 {
@@ -26,6 +29,7 @@ class ActionItem extends Model
         'tenggat',
         'status',
         'selesai_pada',
+        'bukti_penutupan',
         'diverifikasi_oleh',
     ];
 
@@ -47,8 +51,15 @@ class ActionItem extends Model
                 || $item->report_id !== null;
 
             if (! $punyaSumber) {
-                throw new \DomainException('Action item wajib terhubung ke minimal satu sumber (feedback, review, penugasan, atau laporan).');
+                throw new DomainException('Action item wajib terhubung ke minimal satu sumber (feedback, review, penugasan, atau laporan).');
             }
+
+            if ($item->status === StatusActionItem::Ditutup
+                && trim((string) $item->bukti_penutupan) === '') {
+                throw new DomainException('Penutupan action item wajib menyertakan bukti penutupan.');
+            }
+
+            $item->jagaKewenanganPenutupan();
 
             // Waktu penyelesaian selalu dari jam server, bukan input pengguna.
             $selesai = in_array($item->status, [
@@ -64,6 +75,49 @@ class ActionItem extends Model
                 $item->selesai_pada = null;
             }
         });
+    }
+
+    /**
+     * Hanya pemegang `action_item.verify` yang boleh mengunci item sebagai
+     * selesai atau menutupnya.
+     */
+    private function jagaKewenanganPenutupan(): void
+    {
+        if (! in_array($this->status, [StatusActionItem::TerverifikasiSelesai, StatusActionItem::Ditutup], true)) {
+            return;
+        }
+
+        $pengguna = Auth::user();
+
+        if ($pengguna !== null && ! CakupanPengguna::bolehNamaIzin($pengguna, 'action_item.verify')) {
+            throw new DomainException('Hanya pemegang izin verifikasi yang dapat memverifikasi atau menutup action item.');
+        }
+    }
+
+    /**
+     * Perubahan status item selalu mengubah tunggakan, jadi wajib beralasan.
+     *
+     * @return list<string>
+     */
+    protected function kolomWajibAlasan(): array
+    {
+        return ['status'];
+    }
+
+    protected function wajibAlasanUntuk(string $kolom, mixed $nilaiBaru): bool
+    {
+        if ($kolom !== 'status') {
+            return true;
+        }
+
+        $lama = StatusActionItem::tryFrom((string) $this->getRawOriginal('status'));
+        $baru = $nilaiBaru instanceof StatusActionItem
+            ? $nilaiBaru
+            : StatusActionItem::tryFrom((string) $nilaiBaru);
+
+        $final = [StatusActionItem::TerverifikasiSelesai, StatusActionItem::Ditutup];
+
+        return in_array($baru, $final, true) || in_array($lama, $final, true);
     }
 
     public function feedback(): BelongsTo
@@ -109,5 +163,17 @@ class ActionItem extends Model
         return $this->scopeTunggakan($query)
             ->whereNotNull('tenggat')
             ->where('tenggat', '<', ServerClock::now());
+    }
+
+    /**
+     * Batas baris untuk akun Staf: hanya item yang menjadi tanggung jawabnya.
+     */
+    public function scopeTerlihatOleh(Builder $query, ?User $pengguna): Builder
+    {
+        if ($pengguna === null || ! CakupanPengguna::adalahStaf($pengguna)) {
+            return $query;
+        }
+
+        return $query->where('pic_id', CakupanPengguna::personelId($pengguna) ?? 0);
     }
 }
